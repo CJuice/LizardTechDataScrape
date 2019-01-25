@@ -4,3 +4,4 @@ emailOutput_2019-01-08.txt
 *GrabLizardTechOutputLogInfo
 *export_dir
 .idea/vcs.xml
+*.ipynb
