@@ -194,6 +194,7 @@ def main():
     print(master_df.info())
 
     # LEVEL SUMMARY
+    # TODO: Refactor to function
     level_summary_list = process_level_summary_by_job(df=master_df)
     master_level_df = pd.DataFrame(pd.concat(objs=level_summary_list))
     master_level_df.reset_index(drop=False, inplace=True)
