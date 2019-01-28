@@ -1,7 +1,9 @@
 """
 
-Notes:
-    datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
+Notes: This is my first use of Pandas etc in a data processing script. The code is not designed well because my focus
+was on using Pandas functionality and not overall architecture. The script should be revised at a later date when
+it can be cleaned up.
+datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 """
 
 
