@@ -6,21 +6,24 @@ Notes:
 
 
 def main():
+
+    # IMPORTS
     import datetime
     import dateutil
     import dateutil.tz
-    import os
-    import re
-    from bs4 import BeautifulSoup
-    import pandas as pd
     import numpy as np
-    import matplotlib.pyplot as plt
-    import xlrd
-    import html5lib
-    import lxml
+    import os
+    import pandas as pd
+    import re
+    import urllib.parse as urlpar
+    # from bs4 import BeautifulSoup
+    # import matplotlib.pyplot as plt
+    # import xlrd
+    # import html5lib
+    # import lxml
 
 
-
+    # VARIABLES
     # test_file = r"export_dir\ExampleJobOutput.html"
     jobs_folder = r'export_dir'
     output_folder = r'GrabLizardTechOutputLogInfo'
@@ -29,6 +32,7 @@ def main():
     # output_file_name = f"X_emailOutput_{datetime.date.today()}.csv"
     # output_file_path = os.path.join(output_folder, output_file_name)
 
+    # FUNCTIONS
     def convert_start_date_time_to_datetime(value):
         value = value.strip()
         if "EDT" in value:
@@ -64,6 +68,31 @@ def main():
         unique_values_df.rename(columns={"index": "TopLevelDomain", "Email": "Count"}, inplace=True)
         return unique_values_df
 
+    def extract_email_series_from_messages(df: pd.DataFrame)-> pd.Series:
+        df_no_na = df.dropna()
+        df_no_na = df_no_na[df_no_na["Message"].str.contains("@")]
+        try:
+            # NOTE: re.findall returns a list and I only observed one email per list in my test data
+            emails_series = df_no_na["Message"].apply(func=lambda x: (re.findall(pattern=r'[\w.-]+@[\w.-]+', string=x))[0].lower())
+        except ValueError as ve:
+            return pd.Series()
+        except IndexError as id:
+            return pd.Series()
+        else:
+            return emails_series
+
+    def extract_issuing_url_series(df: pd.DataFrame) -> pd.Series:
+        df_no_na = df.dropna()
+        df_no_na = df_no_na[df_no_na["Message"].str.startswith("Issuing URL: ")]
+        try:
+            url_series = df_no_na["Message"].apply(func=lambda x: x[13:])
+        except ValueError as ve:
+            return pd.Series()
+        except IndexError as id:
+            return pd.Series()
+        else:
+            return url_series
+
     def extract_job_start_date_time_line(file_path: str) -> str:
         keyphrase = "Log session start time"
         break_tag = "<br>"
@@ -79,18 +108,46 @@ def main():
                     continue
         return "NaN"
 
-    def extract_email_series_from_messages(df: pd.DataFrame)-> pd.Series:
-        df_no_na = df.dropna()
-        df_no_na = df_no_na[df_no_na["Message"].str.contains("@")]
-        try:
-            # NOTE: re.findall returns a list and I only observed one email per list in my test data
-            emails_series = df_no_na["Message"].apply(func=lambda x: (re.findall(pattern=r'[\w.-]+@[\w.-]+', string=x))[0].lower())
-        except ValueError as ve:
-            return pd.Series()
-        except IndexError as id:
-            return pd.Series()
-        else:
-            return emails_series
+    def extract_query_string_dicts(series: pd.Series) -> pd.Series:
+        query_string_dicts_series = (series.apply(func=lambda x: urlpar.parse_qs(qs=urlpar.urlparse(x).query))
+                                     .reset_index(drop=True))
+        return query_string_dicts_series
+
+    def inventory_catalog_job_request_count(df: pd.DataFrame) -> pd.DataFrame:
+        # Goal is to extract the catalog names requested in each job, then sum the number of times each catalog is requested
+        catalog_inventory_all_jobs = []
+        job_name_groupeddf = df.groupby([df.index])
+
+        for name, group in job_name_groupeddf:
+            series_urls = extract_issuing_url_series(df=group)
+            series_dicts = extract_query_string_dicts(series=series_urls)
+            catalog_per_job_list = (series_dicts.apply(func=lambda x: x["cat"])
+                                    .apply(func=lambda x: x[0])
+                                    .unique()
+                                    .tolist())
+            catalog_inventory_all_jobs.extend(catalog_per_job_list)
+
+        catalog_counts_df = (pd.Series(catalog_inventory_all_jobs)
+                             .value_counts()
+                             .to_frame())
+        catalog_counts_df.reset_index(inplace=True)
+        catalog_counts_df.rename(columns={"index": "Catalog Name", 0: "Job Count"}, inplace=True)
+        return catalog_counts_df
+
+    def process_level_summary_by_job(df: pd.DataFrame):
+        level_summary_list = []
+        level_groupeddf = df.groupby([df.index])
+
+        for name, group in level_groupeddf:
+            level_df = group["Level"].value_counts().to_frame()
+            level_df["JOB_ID"] = name
+            level_summary_list.append(level_df)
+
+        return level_summary_list
+        # catalog_counts_df.reset_index(inplace=True)
+        # catalog_counts_df.rename(columns={"index": "Catalog Name", 0: "Job Count"}, inplace=True)
+        # return catalog_counts_df
+
 
     def setup_initial_dataframe(file_path: str) -> pd.DataFrame:
         # Use pandas to create list of dataframes from tables in html. Should only be 1 per file; Get 0 index.
@@ -104,6 +161,8 @@ def main():
         df.drop([0], axis=0, inplace=True)  # drop first row
         return df
 
+
+    # FUNCTIONALITY
     master_email_series_list = []
     master_html_df_list = []
 
@@ -127,26 +186,80 @@ def main():
                 dt_start_UTC.replace(tzinfo=to_zone)    # Not sure how this will be affected by time changes on my puter
 
                 html_df = setup_initial_dataframe(file_path=full_file_path)
-
+                html_df["JOB_ID"] = file    # Add a unique job id field to be able to group message content
+                html_df.set_index(keys="JOB_ID", drop=True, inplace=True)
                 master_html_df_list.append(html_df)
 
-    master_df = pd.DataFrame(pd.concat(objs=master_html_df_list)).reset_index()
+    master_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
     print(master_df.info())
 
+    # LEVEL SUMMARY
+    level_summary_list = process_level_summary_by_job(df=master_df)
+    master_level_df = pd.DataFrame(pd.concat(objs=level_summary_list))
+    master_level_df.reset_index(drop=False, inplace=True)
+    master_level_df.rename(columns={"index": "Level", "Level": "Count"}, inplace=True)
+    level_groupby_df = master_level_df.groupby(by=["JOB_ID", "Level"]).mean()
+    print(level_groupby_df.head())
+
     # EMAIL PROCESSING
-    # isolate the Message values that contain '@'
-    emails_df = extract_email_series_from_messages(df=master_df).to_frame(name="Email").reset_index()
+    #   isolate the Message values that contain '@'
+    emails_df = (extract_email_series_from_messages(df=master_df)
+                 .to_frame(name="Email")
+                 .reset_index())
 
-    # process email occurrences
+    #   process email occurrences
     email_counts_df = count_email_occurrences(df=emails_df)
+    print(email_counts_df)
 
-    # process emails for unique extensions (gov, com, edu, etc)
+    #   process emails for unique extensions (gov, com, edu, etc)
     unique_email_extensions_df = determine_unique_email_extensions(df=email_counts_df)
     print(unique_email_extensions_df)
+
+    # ISSUING URL QUERY STRING EXTRACTION
+    issuing_url_series = extract_issuing_url_series(df=master_df)
+    issuing_url_query_string_dicts = extract_query_string_dicts(issuing_url_series)
+
+    # CATALOG PROCESSING
+    #   amount of url activity for catalogs
+    catalog_url_activity_inventory_df = (issuing_url_query_string_dicts.apply(func=lambda x: x["cat"])
+                                         .apply(func=lambda x: x[0])
+                                         .value_counts()
+                                         .to_frame()
+                                         .reset_index())
+    catalog_url_activity_inventory_df.rename(columns={"index": "Catalog URL Activity", "Message": "URL Calls"}, inplace=True)
+    print(catalog_url_activity_inventory_df)
+
+    #   count of job requests for catalogs
+    catalog_job_request_count_df = inventory_catalog_job_request_count(df=master_df)
+    print(catalog_job_request_count_df)
+
     # output various final contents to a unique sheet in excel file
     with pd.ExcelWriter(create_output_file_path(extension="xlsx")) as xlsx_writer:
-        email_counts_df.to_excel(excel_writer=xlsx_writer, sheet_name="Unique Emails Summary", na_rep=np.NaN, header=True, index=False)
-        unique_email_extensions_df.to_excel(excel_writer=xlsx_writer, sheet_name="Top-Level Domains Summary", na_rep=np.NaN, header=True, index=False)
+        email_counts_df.to_excel(excel_writer=xlsx_writer,
+                                 sheet_name="Unique Emails Summary",
+                                 na_rep=np.NaN,
+                                 header=True,
+                                 index=False)
+        unique_email_extensions_df.to_excel(excel_writer=xlsx_writer,
+                                            sheet_name="Top-Level Domains Summary",
+                                            na_rep=np.NaN,
+                                            header=True,
+                                            index=False)
+        catalog_job_request_count_df.to_excel(excel_writer=xlsx_writer,
+                                              sheet_name="Catalog Job Request Counts",
+                                              na_rep=np.NaN,
+                                              header=True,
+                                              index=False)
+        catalog_url_activity_inventory_df.to_excel(excel_writer=xlsx_writer,
+                                                   sheet_name="Catalog URL Activty",
+                                                   na_rep=np.NaN,
+                                                   header=True,
+                                                   index=False)
+        level_groupby_df.to_excel(excel_writer=xlsx_writer,
+                                  sheet_name="Level Type Summary by Job",
+                                  na_rep=np.NaN,
+                                  header=True,
+                                  index=True)
 
 
 if __name__ == "__main__":
