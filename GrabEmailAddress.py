@@ -8,7 +8,6 @@ datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 
 
 def main():
-
     # IMPORTS
     import datetime
     import dateutil
@@ -24,12 +23,12 @@ def main():
     # import html5lib
     # import lxml
 
-
     # VARIABLES
-    # test_file = r"export_dir\ExampleJobOutput.html"
-    jobs_folder = r'export_dir'
-    output_folder = r'GrabLizardTechOutputLogInfo'
-    # jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
+    # jobs_folder = r'export_dir'
+    # output_folder = r'GrabLizardTechOutputLogInfo'
+    jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
+    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo'   # Production
+
     # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo'   # Production
     # output_file_name = f"X_emailOutput_{datetime.date.today()}.csv"
     # output_file_path = os.path.join(output_folder, output_file_name)
@@ -71,12 +70,13 @@ def main():
         unique_values_df.rename(columns={"index": "TopLevelDomain", "Email": "Count"}, inplace=True)
         return unique_values_df
 
-    def extract_email_series_from_messages(df: pd.DataFrame)-> pd.Series:
+    def extract_email_series_from_messages(df: pd.DataFrame) -> pd.Series:
         df_no_na = df.dropna()
         df_no_na = df_no_na[df_no_na["Message"].str.contains("@")]
         try:
             # NOTE: re.findall returns a list and I only observed one email per list in my test data
-            emails_series = df_no_na["Message"].apply(func=lambda x: (re.findall(pattern=r'[\w.-]+@[\w.-]+', string=x))[0].lower())
+            emails_series = df_no_na["Message"].apply(
+                func=lambda x: (re.findall(pattern=r'[\w.-]+@[\w.-]+', string=x))[0].lower())
         except ValueError as ve:
             return pd.Series()
         except IndexError as id:
@@ -163,37 +163,56 @@ def main():
         df.drop([0], axis=0, inplace=True)  # drop first row
         return df
 
-
     # FUNCTIONALITY
     master_email_series_list = []
     master_html_df_list = []
+    master_zip_df_list = []
 
     # Walk jobs folder looking for html files
     for dirname, dirs, files in os.walk(jobs_folder):
 
         # Iterate over files
         for file in files:
-            file = file.strip()
-            # print(f"FILE: {file}")
+            full_file_path = os.path.join(dirname, file)
+            file_name, file_ext = os.path.splitext(file)
+            job_id = os.path.basename(os.path.dirname(full_file_path))
 
-            # Isolate html files
-            if file.endswith('.html'):
-                full_file_path = os.path.join(dirname, file)
+            if not os.path.exists(full_file_path):
+                print(f"File Not Found: {full_file_path}")
+                continue
+
+            if file_ext == ".html":
 
                 # Extract job start date and time
                 start = extract_job_start_date_time_line(file_path=full_file_path)
                 dt_start_UTC = convert_start_date_time_to_datetime(value=start)
                 # from_zone = dateutil.tz.tzutc()
                 to_zone = dateutil.tz.tzlocal()
-                dt_start_UTC.replace(tzinfo=to_zone)    # Not sure how this will be affected by time changes on my puter
+                dt_start_UTC.replace(tzinfo=to_zone)  # Not sure how this will be affected by time changes on my puter
 
                 html_df = setup_initial_dataframe(file_path=full_file_path)
-                html_df["JOB_ID"] = file    # Add a unique job id field to be able to group message content
+                html_df["JOB_ID"] = job_id  # Add a unique job id field to be able to group message content
                 html_df.set_index(keys="JOB_ID", drop=True, inplace=True)
                 master_html_df_list.append(html_df)
 
-    master_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
-    print(master_df.info())
+            elif file_ext == ".zip":
+                byte_size = os.path.getsize(full_file_path) / 1000
+                data = {"Name": [job_id], "ZIP Size KB": [byte_size]}
+                master_zip_df_list.append(pd.DataFrame(data=data, dtype=str))
+
+    try:
+        master_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
+        print(master_df.info())
+    except ValueError:
+        print("No .html files found.")
+
+    try:
+        master_zip_df = pd.DataFrame(pd.concat(objs=master_zip_df_list))
+        master_zip_df.reset_index(drop=True, inplace=True)
+        master_zip_df["ZIP Size KB"] = pd.to_numeric(master_zip_df["ZIP Size KB"])
+        print(master_zip_df.info())
+    except ValueError:
+        print("No .zip files found.")
 
     # LEVEL SUMMARY
     # TODO: Refactor to function
@@ -229,7 +248,8 @@ def main():
                                          .value_counts()
                                          .to_frame()
                                          .reset_index())
-    catalog_url_activity_inventory_df.rename(columns={"index": "Catalog URL Activity", "Message": "URL Calls"}, inplace=True)
+    catalog_url_activity_inventory_df.rename(columns={"index": "Catalog URL Activity", "Message": "URL Calls"},
+                                             inplace=True)
     print(catalog_url_activity_inventory_df)
 
     #   count of job requests for catalogs
@@ -263,6 +283,11 @@ def main():
                                   na_rep=np.NaN,
                                   header=True,
                                   index=True)
+        master_zip_df.to_excel(excel_writer=xlsx_writer,
+                               sheet_name="Job .zip Size Summary",
+                               na_rep=np.NaN,
+                               header=True,
+                               index=False)
 
 
 if __name__ == "__main__":
