@@ -48,7 +48,7 @@ def main():
 
     def create_output_file_path(extension: str) -> str:
         date_string = f"{datetime.datetime.today().year}-{datetime.datetime.today().month}-{datetime.datetime.today().day}"
-        return os.path.join(output_folder, f"X_LizardTechAnalysis_{date_string}.{extension}")
+        return os.path.join(output_folder, f"LizardTechAnalysis_{date_string}.{extension}")
 
     def determine_unique_email_extensions(df: pd.DataFrame) -> pd.DataFrame:
         # count email types based on top-level domain values
