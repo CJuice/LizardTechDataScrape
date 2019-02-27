@@ -53,6 +53,7 @@ def main():
         email_counts_df = email_counts_series.to_frame()
         email_counts_df.reset_index(inplace=True)
         email_counts_df.rename(columns={"Email": "Count", "index": "Email"}, inplace=True)
+        email_counts_df.sort_values(by=["Count"], ascending=False, inplace=True)
         return email_counts_df
 
     def create_output_file_path(extension: str) -> str:
@@ -149,7 +150,6 @@ def main():
         # catalog_counts_df.reset_index(inplace=True)
         # catalog_counts_df.rename(columns={"index": "Catalog Name", 0: "Job Count"}, inplace=True)
         # return catalog_counts_df
-
 
     def setup_initial_dataframe(file_path: str) -> pd.DataFrame:
         # Use pandas to create list of dataframes from tables in html. Should only be 1 per file; Get 0 index.
