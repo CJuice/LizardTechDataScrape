@@ -1,6 +1,10 @@
 """
+Walk the jobs directory for LizardTech Tool processing html files for values and assessing zip file size.
+Walk the output jobs directory. Each job will contain an html file and likely a zip file. Convert the html file
+to a dataframe and extract the values of interest. Assess the compressed size of the zip files. Output this information
+to a single excel file with multiple sheets.
 
-Notes: This is my first use of Pandas etc in a data processing script. The code is not designed well because my focus
+NOTE: This was my first use of Pandas in a data processing script. The code is not designed well since my focus
 was on using Pandas functionality and not overall architecture. The script should be revised at a later date when
 it can be cleaned up.
 datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
@@ -8,6 +12,7 @@ datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 
 
 def main():
+
     # IMPORTS
     import datetime
     import dateutil
@@ -279,6 +284,8 @@ def main():
                                      na_rep=np.NaN,
                                      header=True,
                                      index=False)
+
+        print("Process Complete")
 
 
 if __name__ == "__main__":
