@@ -17,21 +17,12 @@ def main():
     import pandas as pd
     import re
     import urllib.parse as urlpar
-    # from bs4 import BeautifulSoup
-    # import matplotlib.pyplot as plt
-    # import xlrd
-    # import html5lib
-    # import lxml
 
     # VARIABLES
     # jobs_folder = r'export_dir'
     # output_folder = r'GrabLizardTechOutputLogInfo'
     jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
-    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo'   # Production
-
-    # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo'   # Production
-    # output_file_name = f"X_emailOutput_{datetime.date.today()}.csv"
-    # output_file_path = os.path.join(output_folder, output_file_name)
+    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo'  # Production
 
     # FUNCTIONS
     def convert_start_date_time_to_datetime(value):
@@ -117,7 +108,9 @@ def main():
         return query_string_dicts_series
 
     def inventory_catalog_job_request_count(df: pd.DataFrame) -> pd.DataFrame:
-        # Goal is to extract the catalog names requested in each job, then sum the number of times each catalog is requested
+
+        # Goal is to extract the catalog names requested in each job, then sum the number of times
+        #   each catalog is requested
         catalog_inventory_all_jobs = []
         job_name_groupeddf = df.groupby([df.index])
 
@@ -137,21 +130,19 @@ def main():
         catalog_counts_df.rename(columns={"index": "Catalog Name", 0: "Job Count"}, inplace=True)
         return catalog_counts_df
 
-    def process_level_summary_by_job(df: pd.DataFrame):
-        level_summary_list = []
+    def process_level_summary_by_job(df: pd.DataFrame) -> list:
+        level_summary_ls = []
         level_groupeddf = df.groupby([df.index])
 
         for name, group in level_groupeddf:
             level_df = group["Level"].value_counts().to_frame()
             level_df["JOB_ID"] = name
-            level_summary_list.append(level_df)
+            level_summary_ls.append(level_df)
 
-        return level_summary_list
-        # catalog_counts_df.reset_index(inplace=True)
-        # catalog_counts_df.rename(columns={"index": "Catalog Name", 0: "Job Count"}, inplace=True)
-        # return catalog_counts_df
+        return level_summary_ls
 
     def setup_initial_dataframe(file_path: str) -> pd.DataFrame:
+
         # Use pandas to create list of dataframes from tables in html. Should only be 1 per file; Get 0 index.
         df = pd.read_html(io=file_path)[0]
 
@@ -164,81 +155,81 @@ def main():
         return df
 
     # FUNCTIONALITY
-    master_email_series_list = []
     master_html_df_list = []
     master_zip_df_list = []
 
     # Walk jobs folder looking for html files
-    for dirname, dirs, files in os.walk(jobs_folder):
+    for root, dirs, files in os.walk(jobs_folder):
 
         # Iterate over files
         for file in files:
-            full_file_path = os.path.join(dirname, file)
+            full_file_path = os.path.join(root, file)
             file_name, file_ext = os.path.splitext(file)
             job_id = os.path.basename(os.path.dirname(full_file_path))
 
-            if not os.path.exists(full_file_path):
-                print(f"File Not Found: {full_file_path}")
-                continue
-
             if file_ext == ".html":
 
-                # Extract job start date and time
+                # Extract values such as job start date and time
                 start = extract_job_start_date_time_line(file_path=full_file_path)
                 dt_start_UTC = convert_start_date_time_to_datetime(value=start)
                 # from_zone = dateutil.tz.tzutc()
                 to_zone = dateutil.tz.tzlocal()
                 dt_start_UTC.replace(tzinfo=to_zone)  # Not sure how this will be affected by time changes on my puter
 
+                # Need master list of all dataframes, each containing the extracted html file values
                 html_df = setup_initial_dataframe(file_path=full_file_path)
                 html_df["JOB_ID"] = job_id  # Add a unique job id field to be able to group message content
                 html_df.set_index(keys="JOB_ID", drop=True, inplace=True)
                 master_html_df_list.append(html_df)
 
             elif file_ext == ".zip":
+
+                # What is the compressed job size of the .zip file, if present
                 byte_size = os.path.getsize(full_file_path) / 1000
                 data = {"Name": [job_id], "ZIP Size KB": [byte_size]}
                 master_zip_df_list.append(pd.DataFrame(data=data, dtype=str))
 
+    # JOB HTML VALUES AS DATAFRAME
     try:
-        master_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
-        print(master_df.info())
+        master_html_values_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
+        # print(master_html_values_df.info())
     except ValueError:
         print("No .html files found.")
 
+    # JOB ZIP FILE SIZE AS DATAFRAME
     try:
-        master_zip_df = pd.DataFrame(pd.concat(objs=master_zip_df_list))
-        master_zip_df.reset_index(drop=True, inplace=True)
-        master_zip_df["ZIP Size KB"] = pd.to_numeric(master_zip_df["ZIP Size KB"])
-        print(master_zip_df.info())
+        master_zip_stats_df = pd.DataFrame(pd.concat(objs=master_zip_df_list))
+        master_zip_stats_df.reset_index(drop=True, inplace=True)
+        master_zip_stats_df["ZIP Size KB"] = pd.to_numeric(master_zip_stats_df["ZIP Size KB"])
+        # print(master_zip_stats_df.info())
     except ValueError:
         print("No .zip files found.")
 
     # LEVEL SUMMARY
     # TODO: Refactor to function
-    level_summary_list = process_level_summary_by_job(df=master_df)
+    level_summary_list = process_level_summary_by_job(df=master_html_values_df)
     master_level_df = pd.DataFrame(pd.concat(objs=level_summary_list))
     master_level_df.reset_index(drop=False, inplace=True)
     master_level_df.rename(columns={"index": "Level", "Level": "Count"}, inplace=True)
     level_groupby_df = master_level_df.groupby(by=["JOB_ID", "Level"]).mean()
-    print(level_groupby_df.head())
+    # print(level_groupby_df.head())
 
     # EMAIL PROCESSING
     #   isolate the Message values that contain '@'
-    emails_df = (extract_email_series_from_messages(df=master_df)
+    emails_df = (extract_email_series_from_messages(df=master_html_values_df)
                  .to_frame(name="Email")
                  .reset_index())
 
     #   process email occurrences
     email_counts_df = count_email_occurrences(df=emails_df)
-    print(email_counts_df)
+    # print(email_counts_df)
 
     #   process emails for unique extensions (gov, com, edu, etc)
     unique_email_extensions_df = determine_unique_email_extensions(df=email_counts_df)
-    print(unique_email_extensions_df)
+    # print(unique_email_extensions_df)
 
     # ISSUING URL QUERY STRING EXTRACTION
-    issuing_url_series = extract_issuing_url_series(df=master_df)
+    issuing_url_series = extract_issuing_url_series(df=master_html_values_df)
     issuing_url_query_string_dicts = extract_query_string_dicts(issuing_url_series)
 
     # CATALOG PROCESSING
@@ -250,13 +241,13 @@ def main():
                                          .reset_index())
     catalog_url_activity_inventory_df.rename(columns={"index": "Catalog URL Activity", "Message": "URL Calls"},
                                              inplace=True)
-    print(catalog_url_activity_inventory_df)
+    # print(catalog_url_activity_inventory_df)
 
     #   count of job requests for catalogs
-    catalog_job_request_count_df = inventory_catalog_job_request_count(df=master_df)
-    print(catalog_job_request_count_df)
+    catalog_job_request_count_df = inventory_catalog_job_request_count(df=master_html_values_df)
+    # print(catalog_job_request_count_df)
 
-    # output various final contents to a unique sheet in excel file
+    # Output various final contents to a unique sheet in excel file
     with pd.ExcelWriter(create_output_file_path(extension="xlsx")) as xlsx_writer:
         email_counts_df.to_excel(excel_writer=xlsx_writer,
                                  sheet_name="Unique Emails Summary",
@@ -283,11 +274,11 @@ def main():
                                   na_rep=np.NaN,
                                   header=True,
                                   index=True)
-        master_zip_df.to_excel(excel_writer=xlsx_writer,
-                               sheet_name="Job .zip Size Summary",
-                               na_rep=np.NaN,
-                               header=True,
-                               index=False)
+        master_zip_stats_df.to_excel(excel_writer=xlsx_writer,
+                                     sheet_name="Job .zip Size Summary",
+                                     na_rep=np.NaN,
+                                     header=True,
+                                     index=False)
 
 
 if __name__ == "__main__":
