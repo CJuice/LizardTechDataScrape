@@ -10,8 +10,6 @@ it can be cleaned up.
 datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 """
 
-# TODO: Add a tab in excel spreadsheet with a summary of date range so the output analysis has a date context
-
 
 def main():
 
@@ -299,11 +297,12 @@ def main():
     unique_email_extensions_df = determine_unique_email_extensions(df=email_counts_df)
 
     # ___________________________
-    #   CATALOG PROCESSING
+    #   ISSUING URL PROCESSING
     #   Issuing url query string value extraction
     issuing_url_series = extract_issuing_url_series(df=master_html_values_df)
     issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_series)
 
+    #   Catalog Analysis
     #   Amount of url activity for catalogs. Processes the Series containing a column of dictionaries made of query
     #       parameters from issuing urls in the html files. They are broken out into parameter keyword as key and the
     #       value as a list of the values being passed. The Catalog key is sought and values are put into a new Series.
@@ -321,18 +320,62 @@ def main():
     catalog_job_request_count_df = (inventory_catalog_job_request_count(df=master_html_values_df)
                                     .sort_values(by=["Catalog Name"]))
 
-    #   For clarity, join the two job category related analysis into a single dataframe for excel output
+    #   For clarity in output, join the two job category related analysis into a single dataframe for excel output
     catalog_url_activity_inventory_df.set_index(keys=['Catalog Name'], inplace=True)
     catalog_job_request_count_df.set_index(keys=['Catalog Name'], inplace=True)
     catalog_job_combined = catalog_job_request_count_df.join(other=catalog_url_activity_inventory_df,
                                                              on=["Catalog Name"],
                                                              how="left")
+    # DEV - Interrogate query parameters
+    query_parameter_explanation = {"thinningFactor": "Thinning Factor",
+                                   "srs": "Spatial Reference System",
+                                   "cat": "Catalog",
+                                   "class": "Classifications",
+                                   "res": "Resolution?",
+                                   "dt": "Data Type",
+                                   "bounds": "Exporting Extent",
+                                   "oif": "Output Format",
+                                   "item": "Unknown Meaning"}
+    query_parameter_values_df_dict = {}
+    for key, value in query_parameter_explanation.items():
+        try:
+            temp_df = (issuing_url_query_string_dicts_series.apply(func=lambda x: x[key]))
+            query_parameter_values_df_dict[value] = temp_df
+        except KeyError:
+            pass
+        else:
+            # print(temp_df)
+            pass
+    summary_query_parameter_values_df_dict = {}
+    for key, value in query_parameter_values_df_dict.items():
+        summary_query_parameter_values_df_dict[key] = pd.value_counts(value.apply(lambda x: tuple(x)))
+    print(summary_query_parameter_values_df_dict)
+    exit()
+
+    #   KEEP
+    # new_series = pd.unique(issuing_url_query_string_dicts_series.apply(lambda x: tuple(x.keys())))
+    # unique_query_parameters = set([item for tup in new_series.tolist() for item in tup])
+    # print(unique_query_parameters)
+    # query_parameter_explanation = {"thinningFactor": "Thinning Factor",
+    #                                "srs": "Spatial Reference System (Projection)",
+    #                                "cat": "Catalog",
+    #                                "class": "Classifications",
+    #                                "res": "Resolution?",
+    #                                "dt": "Data Type",
+    #                                "bounds": "Exporting Extent",
+    #                                "oif": "Output Format",
+    #                                "item": "Unknown Meaning"}
+
+    # exit()
+    #
     # ___________________________
     # DATE RANGE EVALUATION
-    date_range_df = pd.DataFrame(data=[[np.min(date_range_list), np.max(date_range_list)]], columns=["MIN JOB DATE", "MAX JOB DATE"], dtype=str)
+    date_range_df = pd.DataFrame(data=[[np.min(date_range_list), np.max(date_range_list)]],
+                                 columns=["MIN JOB DATE", "MAX JOB DATE"],
+                                 dtype=str)
 
     # ___________________________
-    #   OUTPUT EVALUATIONS
+    #   OUTPUT THE EVALUATIONS
     #   Output various final contents to a unique sheet in excel file
     with pd.ExcelWriter(create_output_file_path(extension="xlsx")) as xlsx_writer:
         date_range_df.to_excel(excel_writer=xlsx_writer,
@@ -365,6 +408,12 @@ def main():
                                      na_rep=np.NaN,
                                      header=True,
                                      index=False)
+        for key, value in summary_query_parameter_values_df_dict.items():
+            value.to_excel(excel_writer=xlsx_writer,
+                                     sheet_name=key,
+                                     na_rep=np.NaN,
+                                     header=True,
+                                     index=True)
 
         print("Process Complete")
 
