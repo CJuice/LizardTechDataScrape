@@ -241,7 +241,6 @@ def main():
                 # Need to add a unique job id field to be able to group message content and also relate dataframes
                 #   Set this job id as the index and store the dataframe for this html file in the master list
                 html_df["JOB_ID"] = job_id
-                # html_df.set_index(keys="JOB_ID", drop=True, inplace=True)
                 master_html_df_list.append(html_df)
 
             elif file_ext == ".zip":
@@ -272,7 +271,6 @@ def main():
         master_zip_stats_df = pd.DataFrame(pd.concat(objs=master_zip_df_list))
         master_zip_stats_df.reset_index(drop=True, inplace=True)
         master_zip_stats_df["ZIP Size KB"] = pd.to_numeric(master_zip_stats_df["ZIP Size KB"])
-        # print(master_zip_stats_df.info())
     except ValueError:
         print("No .zip files found.")
 
@@ -284,7 +282,6 @@ def main():
     master_level_df.reset_index(drop=False, inplace=True)
     master_level_df.rename(columns={"index": "Level", "Level": "Count"}, inplace=True)
     level_groupby_df = master_level_df.groupby(by=["JOB_ID", "Level"]).mean()
-    # print(level_groupby_df.head())
 
     # ___________________________
     #   EMAIL PROCESSING
@@ -319,15 +316,16 @@ def main():
     catalog_url_activity_inventory_df.sort_values(by=["Catalog Name"], inplace=True)
 
     #   count of job requests for catalogs
-    catalog_job_request_count_df = inventory_catalog_job_request_count(df=master_html_values_df).sort_values(by=["Catalog Name"])
+    catalog_job_request_count_df = (inventory_catalog_job_request_count(df=master_html_values_df)
+                                    .sort_values(by=["Catalog Name"]))
 
+    #   For clarity, join the two job category related analysis into a single dataframe for excel output
     catalog_url_activity_inventory_df.set_index(keys=['Catalog Name'], inplace=True)
     catalog_job_request_count_df.set_index(keys=['Catalog Name'], inplace=True)
-    # print(catalog_url_activity_inventory_df.info())
-    # print(catalog_job_request_count_df.info())
-    catalog_job_combined = catalog_job_request_count_df.join(other=catalog_url_activity_inventory_df, on=["Catalog Name"], how="left")
-    # print(catalog_job_combined)
-    # exit()
+    catalog_job_combined = catalog_job_request_count_df.join(other=catalog_url_activity_inventory_df,
+                                                             on=["Catalog Name"],
+                                                             how="left")
+
     # ___________________________
     #   OUTPUT EVALUATIONS
     #   Output various final contents to a unique sheet in excel file
