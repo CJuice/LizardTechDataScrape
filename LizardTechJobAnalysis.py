@@ -218,13 +218,15 @@ def main():
     #   Need two lists for storing dataframe from each/every file being inspected. Lists will then become a master df
     master_html_df_list = []
     master_zip_df_list = []
-
+    date_range_list = []
     #   Need to walk the jobs folder and operate on the files within
     for root, dirs, files in os.walk(jobs_folder):
         for file in files:
             full_file_path = os.path.join(root, file)
             file_name, file_ext = os.path.splitext(file)
             job_id = os.path.basename(os.path.dirname(full_file_path))
+            time_file_last_modified = os.path.getmtime(full_file_path)
+            date_range_list.append(datetime.datetime.fromtimestamp(time_file_last_modified))
 
             if file_ext == ".html":
 
@@ -325,11 +327,19 @@ def main():
     catalog_job_combined = catalog_job_request_count_df.join(other=catalog_url_activity_inventory_df,
                                                              on=["Catalog Name"],
                                                              how="left")
+    # ___________________________
+    # DATE RANGE EVALUATION
+    date_range_df = pd.DataFrame(data=[[np.min(date_range_list), np.max(date_range_list)]], columns=["MIN JOB DATE", "MAX JOB DATE"], dtype=str)
 
     # ___________________________
     #   OUTPUT EVALUATIONS
     #   Output various final contents to a unique sheet in excel file
     with pd.ExcelWriter(create_output_file_path(extension="xlsx")) as xlsx_writer:
+        date_range_df.to_excel(excel_writer=xlsx_writer,
+                               sheet_name="Date Range of Jobs in Analysis",
+                               na_rep=np.NaN,
+                               header=True,
+                               index=False)
         email_counts_df.to_excel(excel_writer=xlsx_writer,
                                  sheet_name="Unique Emails Summary",
                                  na_rep=np.NaN,
@@ -345,16 +355,6 @@ def main():
                                       na_rep=np.NaN,
                                       header=True,
                                       index=True)
-        # catalog_job_request_count_df.to_excel(excel_writer=xlsx_writer,
-        #                                       sheet_name="Catalog Job Request Counts",
-        #                                       na_rep=np.NaN,
-        #                                       header=True,
-        #                                       index=False)
-        # catalog_url_activity_inventory_df.to_excel(excel_writer=xlsx_writer,
-        #                                            sheet_name="Catalog URL Request Frequency",
-        #                                            na_rep=np.NaN,
-        #                                            header=True,
-        #                                            index=False)
         level_groupby_df.to_excel(excel_writer=xlsx_writer,
                                   sheet_name="Level Type Summary by Job",
                                   na_rep=np.NaN,
