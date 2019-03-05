@@ -12,7 +12,6 @@ datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 
 
 def main():
-
     # IMPORTS
     import datetime
     import dateutil
@@ -24,7 +23,7 @@ def main():
     import urllib.parse as urlpar
 
     # VARIABLES
-    jobs_folder = r'export_dir'
+    jobs_folder = r'export_dir2'
     output_folder = r'GrabLizardTechOutputLogInfo'
     # jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
     # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo'  # Production
@@ -112,9 +111,10 @@ def main():
         :return:
         """
         df_no_na = df.dropna()
-        df_no_na = df_no_na[df_no_na["Message"].str.startswith("Issuing URL: ")]
+        messages_df = df_no_na[["Message"]]
+        messages_df = messages_df[messages_df["Message"].str.startswith("Issuing URL: ")]
         try:
-            url_series = df_no_na["Message"].apply(func=lambda x: x[13:])
+            url_series = messages_df["Message"].apply(func=lambda x: x[13:])
         except ValueError as ve:
             return pd.Series()
         except IndexError as id:
@@ -148,8 +148,8 @@ def main():
         :param series:
         :return:
         """
-        query_string_dicts_series = (series.apply(func=lambda x: urlpar.parse_qs(qs=urlpar.urlparse(x).query))
-                                     .reset_index(drop=True))
+        query_string_dicts_series = (series.apply(func=lambda x: urlpar.parse_qs(qs=urlpar.urlparse(x).query)))
+        # .reset_index(drop=True))
         return query_string_dicts_series
 
     def inventory_catalog_job_request_count(df: pd.DataFrame) -> pd.DataFrame:
@@ -217,6 +217,7 @@ def main():
     master_html_df_list = []
     master_zip_df_list = []
     date_range_list = []
+
     #   Need to walk the jobs folder and operate on the files within
     for root, dirs, files in os.walk(jobs_folder):
         for file in files:
@@ -261,7 +262,6 @@ def main():
     try:
         master_html_values_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
         master_html_values_df.set_index(keys="JOB_ID", drop=True, inplace=True)
-        # print(master_html_values_df)
     except ValueError:
         print("No .html files found.")
 
@@ -275,8 +275,7 @@ def main():
         print("No .zip files found.")
 
     # ___________________________
-    #   LEVEL SUMMARY
-    # TODO: Refactor to function
+    #   LEVEL SUMMARY (INFO, ERROR)
     level_summary_list = process_level_summary_by_job(df=master_html_values_df)
     master_level_df = pd.DataFrame(pd.concat(objs=level_summary_list))
     master_level_df.reset_index(drop=False, inplace=True)
@@ -299,7 +298,7 @@ def main():
     # ___________________________
     #   ISSUING URL PROCESSING
     #   Issuing url query string value extraction
-    issuing_url_series = extract_issuing_url_series(df=master_html_values_df)
+    issuing_url_series = extract_issuing_url_series(df=master_html_values_df)  # This series contains a job id index
     issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_series)
 
     #   Catalog Analysis
@@ -307,50 +306,76 @@ def main():
     #       parameters from issuing urls in the html files. They are broken out into parameter keyword as key and the
     #       value as a list of the values being passed. The Catalog key is sought and values are put into a new Series.
     #       Then the number of occurrences for each catalog name is counted. This is made into a new dataframe.
-    catalog_url_activity_inventory_df = (issuing_url_query_string_dicts_series.apply(func=lambda x: x["cat"])
-                                         .apply(func=lambda x: x[0])
-                                         .value_counts()
-                                         .to_frame()
-                                         .reset_index())
-    catalog_url_activity_inventory_df.rename(columns={"index": "Catalog Name", "Message": "URL Request Frequency"},
-                                             inplace=True)
-    catalog_url_activity_inventory_df.sort_values(by=["Catalog Name"], inplace=True)
+    # catalog_url_activity_inventory_df = (issuing_url_query_string_dicts_series.apply(func=lambda x: x["cat"])
+    #                                      .apply(func=lambda x: x[0])
+    #                                      .value_counts()
+    #                                      .to_frame()
+    #                                      .reset_index())
+    # catalog_url_activity_inventory_df.rename(columns={"index": "Catalog Name", "Message": "URL Request Frequency"},
+    #                                          inplace=True)
+    # catalog_url_activity_inventory_df.sort_values(by=["Catalog Name"], inplace=True)
+    #
+    # #   count of job requests for catalogs
+    # catalog_job_request_count_df = (inventory_catalog_job_request_count(df=master_html_values_df)
+    #                                 .sort_values(by=["Catalog Name"]))
+    #
+    # #   For clarity in output, join the two job category related analysis into a single dataframe for excel output
+    # catalog_url_activity_inventory_df.set_index(keys=['Catalog Name'], inplace=True)
+    # catalog_job_request_count_df.set_index(keys=['Catalog Name'], inplace=True)
+    # catalog_job_combined = catalog_job_request_count_df.join(other=catalog_url_activity_inventory_df,
+    #                                                          on=["Catalog Name"],
+    #                                                          how="left")
 
-    #   count of job requests for catalogs
-    catalog_job_request_count_df = (inventory_catalog_job_request_count(df=master_html_values_df)
-                                    .sort_values(by=["Catalog Name"]))
-
-    #   For clarity in output, join the two job category related analysis into a single dataframe for excel output
-    catalog_url_activity_inventory_df.set_index(keys=['Catalog Name'], inplace=True)
-    catalog_job_request_count_df.set_index(keys=['Catalog Name'], inplace=True)
-    catalog_job_combined = catalog_job_request_count_df.join(other=catalog_url_activity_inventory_df,
-                                                             on=["Catalog Name"],
-                                                             how="left")
-    # DEV - Interrogate query parameters
+    # Iterate over the query parameters and analyse
     query_parameter_explanation = {"thinningFactor": "Thinning Factor",
                                    "srs": "Spatial Reference System",
                                    "cat": "Catalog",
                                    "class": "Classifications",
-                                   "res": "Resolution?",
+                                   "res": "Resolution",
                                    "dt": "Data Type",
                                    "bounds": "Exporting Extent",
                                    "oif": "Output Format",
                                    "item": "Unknown Meaning"}
+
     query_parameter_values_df_dict = {}
+
+    # Create a dataframe for each query parameter and store in dictionary with explanation term as key
     for key, value in query_parameter_explanation.items():
         try:
-            temp_df = (issuing_url_query_string_dicts_series.apply(func=lambda x: x[key]))
-            query_parameter_values_df_dict[value] = temp_df
+            query_param_df = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(key, np.NaN))
+            query_parameter_values_df_dict[value] = query_param_df
         except KeyError:
+            print(f"Key Error: {key} not found")
             pass
         else:
-            # print(temp_df)
             pass
-    summary_query_parameter_values_df_dict = {}
+
+    # Create job id grouped, unique values dataframes for all query parameters
+    # all_jobs_df = master_html_values_df.index.unique().to_frame(index=False)  # TURNED OFF
+    query_param_unique_dfs_dict = {}
     for key, value in query_parameter_values_df_dict.items():
-        summary_query_parameter_values_df_dict[key] = pd.value_counts(value.apply(lambda x: tuple(x)))
-    print(summary_query_parameter_values_df_dict)
-    exit()
+        query_param_values_df = value.to_frame(name=key).dropna(axis=0, how='any', inplace=False)
+        query_param_values_df.rename(columns={"Message": key}, inplace=True)
+        query_param_values_df = query_param_values_df[key].apply(lambda x: tuple(x))    # pd.unique() won't work on lists, unhashable, cast to tuple
+        unique_results_df = query_param_values_df.groupby("JOB_ID").unique().to_frame()
+        # all_jobs_df = all_jobs_df.join(other=unique_results_df, on="JOB_ID", how="left")  # TURNED OFF
+        list_of_unique_tuples = unique_results_df[key].tolist()
+        unique_tuples_list = []
+        for item in list_of_unique_tuples:
+            unique_tuples_list.append(item)
+        uniques_df = pd.Series(data=unique_tuples_list).value_counts().to_frame().rename(columns={0: "Job Count"}, inplace=False)
+        uniques_df.index.rename(name=key, inplace=True)
+        query_param_unique_dfs_dict[key] = uniques_df
+
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    # DEV - Interrogate query parameters
+
+    # UNSURE WHAT I WAS STARTING TO WORK ON HERE...
+    # summary_query_parameter_values_df_dict = {}
+    # for key, value in query_parameter_values_df_dict.items():
+    #     summary_query_parameter_values_df_dict[key] = pd.value_counts(value.apply(lambda x: tuple(x))).to_frame()
+    #     summary_query_parameter_values_df_dict[key].index.name = key
+    # print(summary_query_parameter_values_df_dict)
 
     #   KEEP
     # new_series = pd.unique(issuing_url_query_string_dicts_series.apply(lambda x: tuple(x.keys())))
@@ -367,7 +392,8 @@ def main():
     #                                "item": "Unknown Meaning"}
 
     # exit()
-    #
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
     # ___________________________
     # DATE RANGE EVALUATION
     date_range_df = pd.DataFrame(data=[[np.min(date_range_list), np.max(date_range_list)]],
@@ -393,11 +419,11 @@ def main():
                                             na_rep=np.NaN,
                                             header=True,
                                             index=False)
-        catalog_job_combined.to_excel(excel_writer=xlsx_writer,
-                                      sheet_name="Catalog Job Analysis",
-                                      na_rep=np.NaN,
-                                      header=True,
-                                      index=True)
+        # catalog_job_combined.to_excel(excel_writer=xlsx_writer,
+        #                               sheet_name="Catalog Job Analysis",
+        #                               na_rep=np.NaN,
+        #                               header=True,
+        #                               index=True)
         level_groupby_df.to_excel(excel_writer=xlsx_writer,
                                   sheet_name="Level Type Summary by Job",
                                   na_rep=np.NaN,
@@ -408,12 +434,35 @@ def main():
                                      na_rep=np.NaN,
                                      header=True,
                                      index=False)
-        for key, value in summary_query_parameter_values_df_dict.items():
+        for key, value in query_param_unique_dfs_dict.items():
             value.to_excel(excel_writer=xlsx_writer,
-                                     sheet_name=key,
-                                     na_rep=np.NaN,
-                                     header=True,
-                                     index=True)
+                           sheet_name=key,
+                           na_rep=np.NaN,
+                           header=True,
+                           index=True)
+
+
+        # for key, value in summary_query_parameter_values_df_dict.items():
+        #     value.to_excel(excel_writer=xlsx_writer,
+        #                    sheet_name=key,
+        #                    na_rep=np.NaN,
+        #                    header=True,
+        #                    index=True)
+
+        # for key, value in query_parameter_unique_values_dfs_dict.items():
+        #     value.to_excel(excel_writer=xlsx_writer,
+        #                    sheet_name=key,
+        #                    na_rep=np.NaN,
+        #                    header=True,
+        #                    index=True)
+
+        # TURNED OFF
+        # all_jobs_df.to_excel(excel_writer=xlsx_writer,
+        #                      sheet_name="Unique Query Parameters per Job",
+        #                      na_rep=str(np.NaN),
+        #                      header=True,
+        #                      index=False)
+
 
         print("Process Complete")
 
