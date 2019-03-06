@@ -313,6 +313,13 @@ def main():
     # all_jobs_df = master_html_values_df.index.unique().to_frame(index=False)  # TURNED OFF
 
     def detect_null_return_substitute(val):
+        """
+        Detect numpy NaN values, type float when inspect, and replace with value.
+        This was added so that null/empty query parameters can be included in counts, which is important for indicating
+        how many jobs did not define the parameter.
+        :param val:
+        :return:
+        """
         if type(val) is list:
             return val[0]
         elif np.isnan(val):
