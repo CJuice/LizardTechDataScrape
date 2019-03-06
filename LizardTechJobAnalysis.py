@@ -328,6 +328,7 @@ def main():
             return "Unknown Value"
 
     query_param_unique_dfs_dict = {}
+    unique_results_by_job_dict = {}
     for key, value in query_parameter_values_df_dict.items():
         query_param_values_df = value.to_frame(name=key)
         query_param_values_df[key] = query_param_values_df[key].apply(detect_null_return_substitute)
@@ -336,6 +337,7 @@ def main():
         query_param_values_df[key] = query_param_values_df[key].apply(lambda x: tuple([x]))  # pd.unique() won't work on lists, unhashable, cast to tuple
         unique_gb = query_param_values_df.groupby("JOB_ID")
         unique_results_df = unique_gb[key].unique().to_frame()
+        unique_results_by_job_dict[key] = unique_results_df
 
         # all_jobs_df = all_jobs_df.join(other=unique_results_df, on="JOB_ID", how="left")  # TURNED OFF
 
@@ -355,8 +357,53 @@ def main():
         # Final conversion of values to strings so that print out to excel doesn't show tuple container symbols
         query_param_unique_dfs_dict[key].reset_index(inplace=True)
         query_param_unique_dfs_dict[key][key] = query_param_unique_dfs_dict[key][key].apply(lambda x: x[0])
+
+    # ___________________________
+    # SPATIAL EXAMINATION OF EXPORT EXTENT
+    # TODO: Stopped development on this section. Continue when time available. CJuice 20190306
+    # def process_raw_extent_value(val):
+    #     """
+    #
+    #     :param val:
+    #     :return:
+    #     """
+    #     val_inner_tuple = val[0]
+    #     inner_val_as_list = list(val_inner_tuple)
+    #     split_inner_val_list = inner_val_as_list[0].split(",")
+    #     if len(split_inner_val_list) == 5:
+    #         split_inner_val_list.pop(5)
+    #         split_inner_val_list.pop(2)
+    #         return split_inner_val_list
+    #     else:
+    #         try:
+    #             split_inner_val_list.remove("-Infinity")
+    #             split_inner_val_list.remove("Infinity")
+    #         except Exception as e:
+    #             return split_inner_val_list
+    #         else:
+    #             return split_inner_val_list
+    #
+    # def process_raw_epsg_values(val):
+    #     """
+    #
+    #     :param val:
+    #     :return:
+    #     """
+    #     return str(val[0][0].split(":")[1])
+    #
+    # exporting_extent_df = unique_results_by_job_dict["Exporting Extent"]["Exporting Extent"].apply(process_raw_extent_value).to_frame()
+    # epsg_df = unique_results_by_job_dict["Spatial Reference System"]["Spatial Reference System"].apply(process_raw_epsg_values).to_frame()
+    # spatial_ready_df = exporting_extent_df.join(other=epsg_df, on="JOB_ID", how="left")
+    # print(spatial_ready_df)
+    # # Create a polygon from each bounding extent in the epsg that is meaningful for the values
+    #
+    # # Re project the polygons to a common datum
+    #
+    # # Add these to a feature class with date.
+    #
     # exit()
-   # ___________________________
+
+    # ___________________________
     # DATE RANGE EVALUATION
     date_range_df = pd.DataFrame(data=[[np.min(date_range_list), np.max(date_range_list)]],
                                  columns=["MIN JOB DATE", "MAX JOB DATE"],
