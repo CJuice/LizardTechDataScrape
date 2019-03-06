@@ -278,6 +278,7 @@ def main():
     issuing_url_series = extract_issuing_url_series(df=master_html_values_df)  # This series contains a job id index
     issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_series)
 
+    # ___________________________
     # QUERY PARAMETER EXAMINATION - MULTIPLE OUTPUTS GENERATED
     # Iterate over the query parameters in the issuing url's in the html logs, simmer down to unique occurrences
     #   by job, then get the overall number of times (number of unique jobs) that a value was used/requested by a user
@@ -310,10 +311,20 @@ def main():
     # Create job id grouped, unique values dataframes for all query parameters.
     #   Must get unique occurrence for each job, otherwise counts influenced by quantity of issuing url requests
     # all_jobs_df = master_html_values_df.index.unique().to_frame(index=False)  # TURNED OFF
+
+    def detect_null_return_substitute(val):
+        if type(val) is list:
+            return val[0]
+        elif np.isnan(val):
+            return "DoIT Detected NULL"
+        else:
+            return "Unknown Value"
+
     query_param_unique_dfs_dict = {}
     for key, value in query_parameter_values_df_dict.items():
-        query_param_values_df = value.to_frame(name=key).dropna(axis=0, how='any', inplace=False)
-        query_param_values_df[key] = query_param_values_df[key].apply(lambda x: x[0])
+        query_param_values_df = value.to_frame(name=key)
+        query_param_values_df[key] = query_param_values_df[key].apply(detect_null_return_substitute)
+        # query_param_values_df[key] = query_param_values_df[key].apply(lambda x: x[0]) # Replaced by custom function
         query_param_values_df.rename(columns={"Message": key}, inplace=True)
         query_param_values_df[key] = query_param_values_df[key].apply(lambda x: tuple([x]))  # pd.unique() won't work on lists, unhashable, cast to tuple
         unique_gb = query_param_values_df.groupby("JOB_ID")
@@ -337,7 +348,7 @@ def main():
         # Final conversion of values to strings so that print out to excel doesn't show tuple container symbols
         query_param_unique_dfs_dict[key].reset_index(inplace=True)
         query_param_unique_dfs_dict[key][key] = query_param_unique_dfs_dict[key][key].apply(lambda x: x[0])
-
+    # exit()
    # ___________________________
     # DATE RANGE EVALUATION
     date_range_df = pd.DataFrame(data=[[np.min(date_range_list), np.max(date_range_list)]],
