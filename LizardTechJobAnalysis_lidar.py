@@ -30,7 +30,7 @@ def main():
     # jobs_folder = r'export_dir'   # TESTING
     # output_folder = r'GrabLizardTechOutputLogInfo'    # TESTING
     jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
-    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo'  # Production
+    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
 
     # FUNCTIONS
     def convert_start_date_time_to_datetime(start_dt_str):

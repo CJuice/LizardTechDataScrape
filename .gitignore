@@ -5,3 +5,5 @@ emailOutput_2019-01-08.txt
 *export_dir*
 .idea/vcs.xml
 *.ipynb
+*.bat
+
