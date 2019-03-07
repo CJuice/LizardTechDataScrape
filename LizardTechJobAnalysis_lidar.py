@@ -5,8 +5,8 @@ to a dataframe and extract the values of interest. Assess the compressed size of
 to a single excel file with multiple sheets.
 
 NOTE TO FUTURE DEVELOPERS: This was my first use of Pandas in a data processing script. The code may not designed
-well since my focus was on using Pandas functionality and not overall architecture. The script Could be revised
-at a later date when it can be cleaned up.
+well since my focus was on using Pandas functionality and not overall architecture. The script could be revised
+at a later date to improve readability and efficiency.
 
 datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 Author: CJuice
