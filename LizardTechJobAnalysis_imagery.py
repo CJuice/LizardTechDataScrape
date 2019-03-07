@@ -28,10 +28,10 @@ def main():
     import urllib.parse as urlpar
 
     # VARIABLES
-    jobs_folder = r'export_dir_imagery'   # TESTING
-    output_folder = r'GrabLizardTechOutputLogInfo_imagery'    # TESTING
-    # jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
-    # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
+    # jobs_folder = r'export_dir_imagery'   # TESTING
+    # output_folder = r'GrabLizardTechOutputLogInfo_imagery'    # TESTING
+    jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
+    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
 
     # FUNCTIONS
     def convert_start_date_time_to_datetime(start_dt_str):
@@ -94,7 +94,9 @@ def main():
         :return: pandas series of email specific messages
         """
         df_no_na = html_table_df.dropna()
-        df_no_na = df_no_na[df_no_na["Message"].str.contains("@")]
+        df_no_na = df_no_na[(df_no_na["Message"].str.contains("email")) & (df_no_na["Message"].str.contains("@"))]    #
+        print(df_no_na)
+
         try:
             # NOTE: re.findall returns a list and I only observed one email per list in my test data
             emails_series = df_no_na["Message"].apply(
@@ -246,11 +248,13 @@ def main():
                 continue
 
     # ___________________________
-    #   JOB VALUES AS DATAFRAME
-    #   Need to make single master html content and zip content dataframes from list of individual file dataframes
+    #   ALL JOB VALUES AS DATAFRAME
+    #   Need to make single master html content dataframe, and single zip file content dataframe from list of
+    #       individual file dataframes
     try:
-        master_html_values_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
+        master_html_values_df = pd.DataFrame(pd.concat(objs=master_html_df_list, sort=False))
         master_html_values_df.set_index(keys="JOB_ID", drop=True, inplace=True)
+        master_html_values_df.drop(columns=["Unnamed: 5"], inplace=True)  # Strange column of garbage with few values
     except ValueError:
         print("No .html files found.")
 
@@ -264,11 +268,16 @@ def main():
         print("No .zip files found.")
 
     # ___________________________
+    #   Remove java error messages from Level column in master html dataframe
+    master_html_values_df = master_html_values_df[(master_html_values_df["Level"] == "INFO") | (master_html_values_df["Level"] == "ERROR")]
+
+    # ___________________________
     #   LEVEL SUMMARY (INFO, ERROR)
     level_summary_list = process_level_summary_by_job(html_table_df=master_html_values_df)
     master_level_df = pd.DataFrame(pd.concat(objs=level_summary_list))
     master_level_df.reset_index(drop=False, inplace=True)
     master_level_df.rename(columns={"index": "Level", "Level": "Count"}, inplace=True)
+    master_level_df = master_level_df[(master_level_df["Level"] == "ERROR") | (master_level_df["Level"] == "INFO")]
     level_groupby_df = master_level_df.groupby(by=["JOB_ID", "Level"]).mean()
 
     # ___________________________
@@ -287,84 +296,84 @@ def main():
     # ___________________________
     #   ISSUING URL PROCESSING
     #   Issuing url query string value extraction
-    issuing_url_series = extract_issuing_url_series(html_table_df=master_html_values_df)  # This series contains a job id index
-    issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_series)
+    # issuing_url_series = extract_issuing_url_series(html_table_df=master_html_values_df)  # This series contains a job id index
+    # issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_series)
 
     # ___________________________
     # QUERY PARAMETER EXAMINATION - MULTIPLE OUTPUTS GENERATED
     # Iterate over the query parameters in the issuing url's in the html logs, simmer down to unique occurrences
     #   by job, then get the overall number of times (number of unique jobs) that a value was used/requested by a user
     # NOTE: Changing the order of the dictionary values will change the order of the excel tabs
-    query_parameter_explanation = {"cat": "Catalog",
-                                   "thinningFactor": "Thinning Factor",
-                                   "srs": "Spatial Reference System",
-                                   "class": "Classifications",
-                                   "res": "Resolution",
-                                   "dt": "Data Type",
-                                   "oif": "Output Format",
-                                   "bounds": "Exporting Extent",
-                                   "item": "Unknown Meaning",
-                                   }
-    query_parameter_values_df_dict = {}
-
-    # Create a dataframe for each query parameter and store in dictionary with explanation term as key
-    for key, value in query_parameter_explanation.items():
-        try:
-            query_param_df = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(key, np.NaN))
-            query_parameter_values_df_dict[value] = query_param_df
-        except KeyError:
-            print(f"Key Error: {key} not found")
-            pass
-        else:
-            pass
-
-    # Create job id grouped, unique values dataframes for all query parameters.
-    #   Must get unique occurrence for each job, otherwise counts influenced by quantity of issuing url requests
-    # all_jobs_df = master_html_values_df.index.unique().to_frame(index=False)  # TURNED OFF
-
-    unique_results_by_job_dict = {}
-    query_param_unique_dfs_dict = {}
-    for key, value in query_parameter_values_df_dict.items():
-        query_param_values_df = value.to_frame(name=key)
-        query_param_values_df[key] = query_param_values_df[key].apply(isolate_value_in_list_or_replace_null)
-        # query_param_values_df[key] = query_param_values_df[key].apply(lambda x: x[0]) # Replaced by custom function
-        query_param_values_df.rename(columns={"Message": key}, inplace=True)
-        query_param_values_df[key] = query_param_values_df[key].apply(lambda x: tuple([x]))  # pd.unique() won't work on lists, unhashable, cast to tuple
-        unique_gb = query_param_values_df.groupby("JOB_ID")
-        unique_results_df = unique_gb[key].unique().to_frame()
-        unique_results_by_job_dict[key] = unique_results_df
-
-        # all_jobs_df = all_jobs_df.join(other=unique_results_df, on="JOB_ID", how="left")  # TURNED OFF
-
-        list_of_unique_tuples = unique_results_df[key].tolist()
-        unique_tuples_list = []
-        for item in list_of_unique_tuples:
-            # NOTE: Items are np.ndarray. Encountered issues in value_counts() with ndarray's. Needed them as lists.
-            #   Otherwise they don't always compare equally, it seems, and values that are visually identical are not
-            #   counted in the same bucket but just repeat as single counts. Converting to lists solved the problem.
-            # NOTE: Encountered issue here. Converting ndarray to a list wiped the few unique catalog items that
-            #   contained more than one catalog name. Had to adjust by putting each item into a single tuple
-            #   containing a comma sep string
-            converted = np.ndarray.tolist(item)
-            if key == "Catalog" and len(item) > 1:
-                blank_string = ""
-                for val in item:
-                    val = val[0]
-                    if blank_string == "":
-                        blank_string = val
-                    else:
-                        blank_string += f", {val}"
-                converted = [(blank_string,)]   # Using extend on tuple adds the string value to the list, not a tuple
-            unique_tuples_list.extend(converted)
-
-        uniques_value_counts_series = pd.Series(data=unique_tuples_list).value_counts()
-        uniques_df = uniques_value_counts_series.to_frame().rename(columns={0: "Job Count"}, inplace=False)
-        uniques_df.index.rename(name=key, inplace=True)
-        query_param_unique_dfs_dict[key] = uniques_df
-
-        # Final conversion of values to strings so that print out to excel doesn't show tuple container symbols
-        query_param_unique_dfs_dict[key].reset_index(inplace=True)
-        query_param_unique_dfs_dict[key][key] = query_param_unique_dfs_dict[key][key].apply(lambda x: x[0])
+    # query_parameter_explanation = {"cat": "Catalog",
+    #                                "thinningFactor": "Thinning Factor",
+    #                                "srs": "Spatial Reference System",
+    #                                "class": "Classifications",
+    #                                "res": "Resolution",
+    #                                "dt": "Data Type",
+    #                                "oif": "Output Format",
+    #                                "bounds": "Exporting Extent",
+    #                                "item": "Unknown Meaning",
+    #                                }
+    # query_parameter_values_df_dict = {}
+    #
+    # # Create a dataframe for each query parameter and store in dictionary with explanation term as key
+    # for key, value in query_parameter_explanation.items():
+    #     try:
+    #         query_param_df = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(key, np.NaN))
+    #         query_parameter_values_df_dict[value] = query_param_df
+    #     except KeyError:
+    #         print(f"Key Error: {key} not found")
+    #         pass
+    #     else:
+    #         pass
+    #
+    # # Create job id grouped, unique values dataframes for all query parameters.
+    # #   Must get unique occurrence for each job, otherwise counts influenced by quantity of issuing url requests
+    # # all_jobs_df = master_html_values_df.index.unique().to_frame(index=False)  # TURNED OFF
+    #
+    # unique_results_by_job_dict = {}
+    # query_param_unique_dfs_dict = {}
+    # for key, value in query_parameter_values_df_dict.items():
+    #     query_param_values_df = value.to_frame(name=key)
+    #     query_param_values_df[key] = query_param_values_df[key].apply(isolate_value_in_list_or_replace_null)
+    #     # query_param_values_df[key] = query_param_values_df[key].apply(lambda x: x[0]) # Replaced by custom function
+    #     query_param_values_df.rename(columns={"Message": key}, inplace=True)
+    #     query_param_values_df[key] = query_param_values_df[key].apply(lambda x: tuple([x]))  # pd.unique() won't work on lists, unhashable, cast to tuple
+    #     unique_gb = query_param_values_df.groupby("JOB_ID")
+    #     unique_results_df = unique_gb[key].unique().to_frame()
+    #     unique_results_by_job_dict[key] = unique_results_df
+    #
+    #     # all_jobs_df = all_jobs_df.join(other=unique_results_df, on="JOB_ID", how="left")  # TURNED OFF
+    #
+    #     list_of_unique_tuples = unique_results_df[key].tolist()
+    #     unique_tuples_list = []
+    #     for item in list_of_unique_tuples:
+    #         # NOTE: Items are np.ndarray. Encountered issues in value_counts() with ndarray's. Needed them as lists.
+    #         #   Otherwise they don't always compare equally, it seems, and values that are visually identical are not
+    #         #   counted in the same bucket but just repeat as single counts. Converting to lists solved the problem.
+    #         # NOTE: Encountered issue here. Converting ndarray to a list wiped the few unique catalog items that
+    #         #   contained more than one catalog name. Had to adjust by putting each item into a single tuple
+    #         #   containing a comma sep string
+    #         converted = np.ndarray.tolist(item)
+    #         if key == "Catalog" and len(item) > 1:
+    #             blank_string = ""
+    #             for val in item:
+    #                 val = val[0]
+    #                 if blank_string == "":
+    #                     blank_string = val
+    #                 else:
+    #                     blank_string += f", {val}"
+    #             converted = [(blank_string,)]   # Using extend on tuple adds the string value to the list, not a tuple
+    #         unique_tuples_list.extend(converted)
+    #
+    #     uniques_value_counts_series = pd.Series(data=unique_tuples_list).value_counts()
+    #     uniques_df = uniques_value_counts_series.to_frame().rename(columns={0: "Job Count"}, inplace=False)
+    #     uniques_df.index.rename(name=key, inplace=True)
+    #     query_param_unique_dfs_dict[key] = uniques_df
+    #
+    #     # Final conversion of values to strings so that print out to excel doesn't show tuple container symbols
+    #     query_param_unique_dfs_dict[key].reset_index(inplace=True)
+    #     query_param_unique_dfs_dict[key][key] = query_param_unique_dfs_dict[key][key].apply(lambda x: x[0])
 
     # ___________________________
     # SPATIAL EXAMINATION OF EXPORT EXTENT
@@ -443,17 +452,17 @@ def main():
                                   na_rep=np.NaN,
                                   header=True,
                                   index=True)
-        master_zip_stats_df.to_excel(excel_writer=xlsx_writer,
-                                     sheet_name="Job .zip Size Summary",
-                                     na_rep=np.NaN,
-                                     header=True,
-                                     index=False)
-        for key, value in query_param_unique_dfs_dict.items():
-            value.to_excel(excel_writer=xlsx_writer,
-                           sheet_name=f"QP - {key}",
-                           na_rep=np.NaN,
-                           header=True,
-                           index=False)
+        # master_zip_stats_df.to_excel(excel_writer=xlsx_writer,
+        #                              sheet_name="Job .zip Size Summary",
+        #                              na_rep=np.NaN,
+        #                              header=True,
+        #                              index=False)
+        # for key, value in query_param_unique_dfs_dict.items():
+        #     value.to_excel(excel_writer=xlsx_writer,
+        #                    sheet_name=f"QP - {key}",
+        #                    na_rep=np.NaN,
+        #                    header=True,
+        #                    index=False)
 
         # TURNED OFF
         # all_jobs_df.to_excel(excel_writer=xlsx_writer,
