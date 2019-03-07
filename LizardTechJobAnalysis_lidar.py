@@ -55,11 +55,11 @@ def main():
         """
         #   count email occurrences
         email_counts_series = emails_dataframe["Email"].value_counts(normalize=False, sort=True, ascending=True, dropna=False)
-        email_counts_df = email_counts_series.to_frame()
-        email_counts_df.reset_index(inplace=True)
-        email_counts_df.rename(columns={"Email": "Count", "index": "Email"}, inplace=True)
-        email_counts_df.sort_values(by=["Count"], ascending=False, inplace=True)
-        return email_counts_df
+        email_counts_dframe = email_counts_series.to_frame()
+        email_counts_dframe.reset_index(inplace=True)
+        email_counts_dframe.rename(columns={"Email": "Count", "index": "Email"}, inplace=True)
+        email_counts_dframe.sort_values(by=["Count"], ascending=False, inplace=True)
+        return email_counts_dframe
 
     def create_output_file_path(extension: str) -> str:
         """
@@ -129,14 +129,14 @@ def main():
         :param file_path: path to job log html file
         :return: string
         """
-        keyphrase = "Log session start time"
+        key_phrase = "Log session start time"
         break_tag = "<br>"
         empty_string = ""
         with open(file_path, 'r') as handler:
             for line in handler:
                 line = line.strip()
-                if keyphrase in line:
-                    line = line.replace(keyphrase, empty_string)
+                if key_phrase in line:
+                    line = line.replace(key_phrase, empty_string)
                     line = line.replace(break_tag, empty_string)
                     return line
                 else:
@@ -152,6 +152,22 @@ def main():
         query_string_dicts_series = (issuing_url_ser.apply(func=lambda x: urlpar.parse_qs(qs=urlpar.urlparse(x).query)))
         return query_string_dicts_series
 
+    def isolate_value_in_list_or_replace_null(attr_val):
+        """
+        Detect numpy NaN values, type float when inspect, and replace with value.
+        This was added so that null/empty query parameters can be included in counts, which is important for indicating
+        how many jobs did not define the parameter.
+        :param attr_val: string value to be substituted for null value
+        :return: value inside of list or a string substitute for np.NaN value
+        """
+
+        if type(attr_val) is list:
+            return attr_val[0]
+        elif np.isnan(attr_val):
+            return "DoIT Detected NULL"
+        else:
+            return "Unknown Value"
+
     def process_level_summary_by_job(html_table_df: pd.DataFrame) -> list:
         """
         Extract the Level information from the html table and summarize value counts for types present, returning list
@@ -159,8 +175,8 @@ def main():
         :return: list of dataframes for each job
         """
         level_summary_ls = []
-        level_groupeddf = html_table_df.groupby([html_table_df.index])
-        for name, group in level_groupeddf:
+        level_grouped_df = html_table_df.groupby([html_table_df.index])
+        for name, group in level_grouped_df:
             level_df = group["Level"].value_counts().to_frame()
             level_df["JOB_ID"] = name
             level_summary_ls.append(level_df)
@@ -203,10 +219,10 @@ def main():
 
                 # Extract values such as job start date and time
                 start_dt_string = extract_job_start_date_time_line(file_path=full_file_path)
-                start_dtobj_UTC = convert_start_date_time_to_datetime(start_dt_str=start_dt_string)
+                start_dtobj_utc = convert_start_date_time_to_datetime(start_dt_str=start_dt_string)
                 # from_zone = dateutil.tz.tzutc()
                 to_zone = dateutil.tz.tzlocal()
-                start_dtobj_UTC.replace(tzinfo=to_zone)  # Not sure how will be affected by time changes on my puter
+                start_dtobj_utc.replace(tzinfo=to_zone)  # Not sure how will be affected by time changes on my puter
 
                 # Need master list of all dataframes, each containing the extracted html file values
                 html_df = setup_initial_dataframe(file_path=full_file_path)
@@ -304,22 +320,6 @@ def main():
     # Create job id grouped, unique values dataframes for all query parameters.
     #   Must get unique occurrence for each job, otherwise counts influenced by quantity of issuing url requests
     # all_jobs_df = master_html_values_df.index.unique().to_frame(index=False)  # TURNED OFF
-
-    def isolate_value_in_list_or_replace_null(attr_val):
-        """
-        Detect numpy NaN values, type float when inspect, and replace with value.
-        This was added so that null/empty query parameters can be included in counts, which is important for indicating
-        how many jobs did not define the parameter.
-        :param attr_val: string value to be substituted for null value
-        :return: value inside of list or a string substitute for np.NaN value
-        """
-
-        if type(attr_val) is list:
-            return attr_val[0]
-        elif np.isnan(attr_val):
-            return "DoIT Detected NULL"
-        else:
-            return "Unknown Value"
 
     unique_results_by_job_dict = {}
     query_param_unique_dfs_dict = {}
