@@ -13,7 +13,7 @@ Revisions: Forked from lidar version and adjusted to fit imagery
 NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
 well since focus was on using Pandas functionality, not overall architecture.
 """
-
+# TODO: Stopped before redoing bounding extent portion and cleaning up entire script to be accurate for imagery
 
 def main():
 
