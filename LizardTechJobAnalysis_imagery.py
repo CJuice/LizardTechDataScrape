@@ -5,9 +5,10 @@ to a dataframe and extract the values of interest. Assess the compressed size of
 to a single excel file with multiple sheets.
 
 datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
+
 Author: CJuice
-Date Created: 20190306
-Revisions:
+Date Created:
+Revisions: Forked from lidar version and adjusted to fit imagery
 
 NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
 well since focus was on using Pandas functionality, not overall architecture.
@@ -27,10 +28,10 @@ def main():
     import urllib.parse as urlpar
 
     # VARIABLES
-    # jobs_folder = r'export_dir_lidar'   # TESTING
-    # output_folder = r'GrabLizardTechOutputLogInfo_lidar'    # TESTING
-    jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
-    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
+    jobs_folder = r'export_dir_imagery'   # TESTING
+    output_folder = r'GrabLizardTechOutputLogInfo_imagery'    # TESTING
+    # jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
+    # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
 
     # FUNCTIONS
     def convert_start_date_time_to_datetime(start_dt_str):

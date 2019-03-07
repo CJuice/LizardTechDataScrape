@@ -16,10 +16,9 @@ def main():
     import os
     import shutil
 
-    root_project_path = os.path.dirname(__file__)   # DEVELOPMENT
-    DIRECTORY_TO_EXAMINE = os.path.join(root_project_path, "export_dir2")    # DEVELOPMENT
-
-    # DIRECTORY_TO_EXAMINE = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # PRODUCTION
+    # root_project_path = os.path.dirname(__file__)   # DEVELOPMENT
+    # DIRECTORY_TO_EXAMINE = os.path.join(root_project_path, "export_dir2")    # DEVELOPMENT
+    DIRECTORY_TO_EXAMINE = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # PRODUCTION
     AGE_COMPARISON_VALUE = datetime.timedelta(days=30)
     now = datetime.datetime.now()
 
