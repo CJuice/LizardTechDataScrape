@@ -27,7 +27,7 @@ def main():
     import urllib.parse as urlpar
 
     # VARIABLES
-    # jobs_folder = r'export_dir2'
+    # jobs_folder = r'export_dir'
     # output_folder = r'GrabLizardTechOutputLogInfo'
     jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
     output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo'  # Production
@@ -320,15 +320,23 @@ def main():
         :param val:
         :return:
         """
+
         if type(val) is list:
+            # string = ""
+            # for item in val:
+                # if string == "":
+                #     string = item
+                # else:
+                #     string += f", {item}"
+            # return string
             return val[0]
         elif np.isnan(val):
             return "DoIT Detected NULL"
         else:
             return "Unknown Value"
 
-    query_param_unique_dfs_dict = {}
     unique_results_by_job_dict = {}
+    query_param_unique_dfs_dict = {}
     for key, value in query_parameter_values_df_dict.items():
         query_param_values_df = value.to_frame(name=key)
         query_param_values_df[key] = query_param_values_df[key].apply(detect_null_return_substitute)
@@ -338,16 +346,38 @@ def main():
         unique_gb = query_param_values_df.groupby("JOB_ID")
         unique_results_df = unique_gb[key].unique().to_frame()
         unique_results_by_job_dict[key] = unique_results_df
+        # if key == "Catalog":
+        #     t = unique_results_df.copy()
+        #     t["length"] = t["Catalog"].apply(lambda x: len(x))
+        #     print(t[(t["length"] > 1)])
 
         # all_jobs_df = all_jobs_df.join(other=unique_results_df, on="JOB_ID", how="left")  # TURNED OFF
 
         list_of_unique_tuples = unique_results_df[key].tolist()
+        # if key == "Catalog":
+        #     for item in list_of_unique_tuples:
+        #         if len(item) > 1:
+        #             print(item)
+
         unique_tuples_list = []
         for item in list_of_unique_tuples:
             # NOTE: Items are np.ndarray. Encountered issues in value_counts() with ndarray's. Needed them as lists.
             #   Otherwise they don't always compare equally, it seems, and values that are visually identical are not
             #   counted in the same bucket but just repeat as single counts. Converting to lists solved the problem.
-            unique_tuples_list.extend(np.ndarray.tolist(item))
+            # NOTE: Encountered issue here. Converting ndarray to a list wiped the few unique catalog items that
+            #   contained more than one catalog name. Had to adjust by putting each item into a single tuple
+            #   containing a comma sep string
+            converted = np.ndarray.tolist(item)
+            if key == "Catalog" and len(item) > 1:
+                blank_string = ""
+                for val in item:
+                    val = val[0]
+                    if blank_string == "":
+                        blank_string = val
+                    else:
+                        blank_string += f", {val}"
+                converted = [(blank_string,)]   # Using extend on tuple adds the string value to the list, not a tuple
+            unique_tuples_list.extend(converted)
 
         uniques_value_counts_series = pd.Series(data=unique_tuples_list).value_counts()
         uniques_df = uniques_value_counts_series.to_frame().rename(columns={0: "Job Count"}, inplace=False)
@@ -357,6 +387,11 @@ def main():
         # Final conversion of values to strings so that print out to excel doesn't show tuple container symbols
         query_param_unique_dfs_dict[key].reset_index(inplace=True)
         query_param_unique_dfs_dict[key][key] = query_param_unique_dfs_dict[key][key].apply(lambda x: x[0])
+
+    # TESTING: Expose multi-catalog records
+    # t = unique_results_by_job_dict["Catalog"]
+    # t["length"] = t["Catalog"].apply(lambda x: len(x))
+    # print(t[(t["length"] > 1)])
 
     # ___________________________
     # SPATIAL EXAMINATION OF EXPORT EXTENT
@@ -402,7 +437,7 @@ def main():
     # # Add these to a feature class with date.
     #
     # exit()
-
+    pass
     # ___________________________
     # DATE RANGE EVALUATION
     date_range_df = pd.DataFrame(data=[[np.min(date_range_list), np.max(date_range_list)]],
