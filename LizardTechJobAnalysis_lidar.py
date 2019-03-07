@@ -4,13 +4,13 @@ Walk the output jobs directory. Each job will contain an html file and likely a 
 to a dataframe and extract the values of interest. Assess the compressed size of the zip files. Output this information
 to a single excel file with multiple sheets.
 
-NOTE TO FUTURE DEVELOPERS: This was my first use of Pandas in a data processing script. The code may not designed
-well since my focus was on using Pandas functionality and not overall architecture. The script could be revised
-at a later date to improve readability and efficiency.
-
 datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 Author: CJuice
 Date Created: 20190306
+Revisions:
+
+NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
+well since focus was on using Pandas functionality, not overall architecture.
 """
 
 
