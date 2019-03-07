@@ -27,8 +27,8 @@ def main():
     import urllib.parse as urlpar
 
     # VARIABLES
-    # jobs_folder = r'export_dir'
-    # output_folder = r'GrabLizardTechOutputLogInfo'
+    # jobs_folder = r'export_dir'   # TESTING
+    # output_folder = r'GrabLizardTechOutputLogInfo'    # TESTING
     jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
     output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo'  # Production
 
