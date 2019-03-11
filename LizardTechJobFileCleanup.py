@@ -1,6 +1,6 @@
 """
 Walk the specified directory, checking the age of folders and files, deleting all that are greater than 30 days in age.
-Walk the LizardTech Output folder on Lidar Server. Check the modified date of all folders and files. Delete all items
+Walk the LizardTech Output folder. Check the modified date of all folders and files. Delete all items
 that are older than 30 days in age. Print out indications of age and item path and name that are deleted so that there
 is transparency.
 Date Created:
