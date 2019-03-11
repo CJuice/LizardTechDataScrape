@@ -7,13 +7,12 @@ to a single excel file with multiple sheets.
 datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 
 Author: CJuice
-Date Created:
-Revisions: Forked from lidar version and adjusted to fit imagery
+Date Created: 20190311
+Revisions: Forked from lidar version and adjusted to fit imagery. Deleted portions of original because the Imagery Logs
+and the LIDAR Logs are not the same. Imagery lacks an Issuing URL so a lot of information is not available.
 
-NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
-well since focus was on using Pandas functionality, not overall architecture.
 """
-# TODO: Stopped before redoing bounding extent portion and cleaning up entire script to be accurate for imagery
+
 
 def main():
 
@@ -25,7 +24,6 @@ def main():
     import os
     import pandas as pd
     import re
-    import urllib.parse as urlpar
 
     # VARIABLES
     # jobs_folder = r'export_dir_imagery'   # TESTING
@@ -95,7 +93,6 @@ def main():
         """
         df_no_na = html_table_df.dropna()
         df_no_na = df_no_na[(df_no_na["Message"].str.contains("email")) & (df_no_na["Message"].str.contains("@"))]    #
-        print(df_no_na)
 
         try:
             # NOTE: re.findall returns a list and I only observed one email per list in my test data
@@ -107,24 +104,6 @@ def main():
             return pd.Series()
         else:
             return emails_series
-
-    def extract_issuing_url_series(html_table_df: pd.DataFrame) -> pd.Series:
-        """
-        Examine the Messages column, identifying the 'Issuing URL: ' records, extract url, return a Series
-        :param html_table_df: dataframe of entire html table contents
-        :return: pandas series of Message content containing Issuing URL
-        """
-        df_no_na = html_table_df.dropna()
-        messages_df = df_no_na[["Message"]]
-        messages_df = messages_df[messages_df["Message"].str.startswith("Issuing URL: ")]
-        try:
-            url_series = messages_df["Message"].apply(func=lambda x: x[13:])
-        except ValueError as ve:
-            return pd.Series()
-        except IndexError as id:
-            return pd.Series()
-        else:
-            return url_series
 
     def extract_job_start_date_time_line(file_path: str) -> str:
         """
@@ -145,31 +124,6 @@ def main():
                 else:
                     continue
         return "NaN"
-
-    def extract_query_string_dicts(issuing_url_ser: pd.Series) -> pd.Series:
-        """
-        Parse the query string parameters and values from a Series of url values and return results as a dictionary
-        :param issuing_url_ser: series of query string values parsed from issuing urls
-        :return: series of query parameters and values
-        """
-        query_string_dicts_series = (issuing_url_ser.apply(func=lambda x: urlpar.parse_qs(qs=urlpar.urlparse(x).query)))
-        return query_string_dicts_series
-
-    def isolate_value_in_list_or_replace_null(attr_val):
-        """
-        Detect numpy NaN values, type float when inspect, and replace with value.
-        This was added so that null/empty query parameters can be included in counts, which is important for indicating
-        how many jobs did not define the parameter.
-        :param attr_val: string value to be substituted for null value
-        :return: value inside of list or a string substitute for np.NaN value
-        """
-
-        if type(attr_val) is list:
-            return attr_val[0]
-        elif np.isnan(attr_val):
-            return "DoIT Detected NULL"
-        else:
-            return "Unknown Value"
 
     def process_level_summary_by_job(html_table_df: pd.DataFrame) -> list:
         """
@@ -296,131 +250,13 @@ def main():
     # ___________________________
     #   ISSUING URL PROCESSING
     #   Issuing url query string value extraction
-    # issuing_url_series = extract_issuing_url_series(html_table_df=master_html_values_df)  # This series contains a job id index
-    # issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_series)
+    # Doesn't exist in Imagery. See LIDAR script if need the code.
 
     # ___________________________
     # QUERY PARAMETER EXAMINATION - MULTIPLE OUTPUTS GENERATED
     # Iterate over the query parameters in the issuing url's in the html logs, simmer down to unique occurrences
     #   by job, then get the overall number of times (number of unique jobs) that a value was used/requested by a user
-    # NOTE: Changing the order of the dictionary values will change the order of the excel tabs
-    # query_parameter_explanation = {"cat": "Catalog",
-    #                                "thinningFactor": "Thinning Factor",
-    #                                "srs": "Spatial Reference System",
-    #                                "class": "Classifications",
-    #                                "res": "Resolution",
-    #                                "dt": "Data Type",
-    #                                "oif": "Output Format",
-    #                                "bounds": "Exporting Extent",
-    #                                "item": "Unknown Meaning",
-    #                                }
-    # query_parameter_values_df_dict = {}
-    #
-    # # Create a dataframe for each query parameter and store in dictionary with explanation term as key
-    # for key, value in query_parameter_explanation.items():
-    #     try:
-    #         query_param_df = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(key, np.NaN))
-    #         query_parameter_values_df_dict[value] = query_param_df
-    #     except KeyError:
-    #         print(f"Key Error: {key} not found")
-    #         pass
-    #     else:
-    #         pass
-    #
-    # # Create job id grouped, unique values dataframes for all query parameters.
-    # #   Must get unique occurrence for each job, otherwise counts influenced by quantity of issuing url requests
-    # # all_jobs_df = master_html_values_df.index.unique().to_frame(index=False)  # TURNED OFF
-    #
-    # unique_results_by_job_dict = {}
-    # query_param_unique_dfs_dict = {}
-    # for key, value in query_parameter_values_df_dict.items():
-    #     query_param_values_df = value.to_frame(name=key)
-    #     query_param_values_df[key] = query_param_values_df[key].apply(isolate_value_in_list_or_replace_null)
-    #     # query_param_values_df[key] = query_param_values_df[key].apply(lambda x: x[0]) # Replaced by custom function
-    #     query_param_values_df.rename(columns={"Message": key}, inplace=True)
-    #     query_param_values_df[key] = query_param_values_df[key].apply(lambda x: tuple([x]))  # pd.unique() won't work on lists, unhashable, cast to tuple
-    #     unique_gb = query_param_values_df.groupby("JOB_ID")
-    #     unique_results_df = unique_gb[key].unique().to_frame()
-    #     unique_results_by_job_dict[key] = unique_results_df
-    #
-    #     # all_jobs_df = all_jobs_df.join(other=unique_results_df, on="JOB_ID", how="left")  # TURNED OFF
-    #
-    #     list_of_unique_tuples = unique_results_df[key].tolist()
-    #     unique_tuples_list = []
-    #     for item in list_of_unique_tuples:
-    #         # NOTE: Items are np.ndarray. Encountered issues in value_counts() with ndarray's. Needed them as lists.
-    #         #   Otherwise they don't always compare equally, it seems, and values that are visually identical are not
-    #         #   counted in the same bucket but just repeat as single counts. Converting to lists solved the problem.
-    #         # NOTE: Encountered issue here. Converting ndarray to a list wiped the few unique catalog items that
-    #         #   contained more than one catalog name. Had to adjust by putting each item into a single tuple
-    #         #   containing a comma sep string
-    #         converted = np.ndarray.tolist(item)
-    #         if key == "Catalog" and len(item) > 1:
-    #             blank_string = ""
-    #             for val in item:
-    #                 val = val[0]
-    #                 if blank_string == "":
-    #                     blank_string = val
-    #                 else:
-    #                     blank_string += f", {val}"
-    #             converted = [(blank_string,)]   # Using extend on tuple adds the string value to the list, not a tuple
-    #         unique_tuples_list.extend(converted)
-    #
-    #     uniques_value_counts_series = pd.Series(data=unique_tuples_list).value_counts()
-    #     uniques_df = uniques_value_counts_series.to_frame().rename(columns={0: "Job Count"}, inplace=False)
-    #     uniques_df.index.rename(name=key, inplace=True)
-    #     query_param_unique_dfs_dict[key] = uniques_df
-    #
-    #     # Final conversion of values to strings so that print out to excel doesn't show tuple container symbols
-    #     query_param_unique_dfs_dict[key].reset_index(inplace=True)
-    #     query_param_unique_dfs_dict[key][key] = query_param_unique_dfs_dict[key][key].apply(lambda x: x[0])
-
-    # ___________________________
-    # SPATIAL EXAMINATION OF EXPORT EXTENT
-    # TODO: Stopped development on this section. Continue when time available. CJuice 20190306
-    # def process_raw_extent_value(val):
-    #     """
-    #
-    #     :param val:
-    #     :return:
-    #     """
-    #     val_inner_tuple = val[0]
-    #     inner_val_as_list = list(val_inner_tuple)
-    #     split_inner_val_list = inner_val_as_list[0].split(",")
-    #     if len(split_inner_val_list) == 5:
-    #         split_inner_val_list.pop(5)
-    #         split_inner_val_list.pop(2)
-    #         return split_inner_val_list
-    #     else:
-    #         try:
-    #             split_inner_val_list.remove("-Infinity")
-    #             split_inner_val_list.remove("Infinity")
-    #         except Exception as e:
-    #             return split_inner_val_list
-    #         else:
-    #             return split_inner_val_list
-    #
-    # def process_raw_epsg_values(val):
-    #     """
-    #
-    #     :param val:
-    #     :return:
-    #     """
-    #     return str(val[0][0].split(":")[1])
-    #
-    # exporting_extent_df = unique_results_by_job_dict["Exporting Extent"]["Exporting Extent"].apply(process_raw_extent_value).to_frame()
-    # epsg_df = unique_results_by_job_dict["Spatial Reference System"]["Spatial Reference System"].apply(process_raw_epsg_values).to_frame()
-    # spatial_ready_df = exporting_extent_df.join(other=epsg_df, on="JOB_ID", how="left")
-    # print(spatial_ready_df)
-    # # Create a polygon from each bounding extent in the epsg that is meaningful for the values
-    #
-    # # Re project the polygons to a common datum
-    #
-    # # Add these to a feature class with date.
-    #
-    # exit()
-
-    pass    # For above and below pycharm comments to be separate and foldable
+    # Doesn't exist in Imagery. See LIDAR script if need the code.
 
     # ___________________________
     # DATE RANGE EVALUATION
@@ -452,24 +288,6 @@ def main():
                                   na_rep=np.NaN,
                                   header=True,
                                   index=True)
-        # master_zip_stats_df.to_excel(excel_writer=xlsx_writer,
-        #                              sheet_name="Job .zip Size Summary",
-        #                              na_rep=np.NaN,
-        #                              header=True,
-        #                              index=False)
-        # for key, value in query_param_unique_dfs_dict.items():
-        #     value.to_excel(excel_writer=xlsx_writer,
-        #                    sheet_name=f"QP - {key}",
-        #                    na_rep=np.NaN,
-        #                    header=True,
-        #                    index=False)
-
-        # TURNED OFF
-        # all_jobs_df.to_excel(excel_writer=xlsx_writer,
-        #                      sheet_name="Unique Query Parameters per Job",
-        #                      na_rep=str(np.NaN),
-        #                      header=True,
-        #                      index=False)
 
         print(f"Process Complete. See output file {create_output_file_path(extension='xlsx')}")
 
