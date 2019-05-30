@@ -26,10 +26,10 @@ def main():
     import re
 
     # VARIABLES
-    # jobs_folder = r'export_dir_imagery'   # TESTING
-    # output_folder = r'GrabLizardTechOutputLogInfo_imagery'    # TESTING
-    jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
-    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
+    jobs_folder = r'export_dir_imagery'   # TESTING
+    output_folder = r'GrabLizardTechOutputLogInfo_imagery'    # TESTING
+    # jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
+    # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
 
     # FUNCTIONS
     def convert_start_date_time_to_datetime(start_dt_str):
@@ -220,6 +220,7 @@ def main():
         master_zip_stats_df["ZIP Size KB"] = pd.to_numeric(master_zip_stats_df["ZIP Size KB"])
     except ValueError:
         print("No .zip files found.")
+        master_zip_stats_df = pd.DataFrame(data={"No Zip Files Found": [0]})
 
     # ___________________________
     #   Remove java error messages from Level column in master html dataframe
@@ -288,6 +289,11 @@ def main():
                                   na_rep=np.NaN,
                                   header=True,
                                   index=True)
+        master_zip_stats_df.to_excel(excel_writer=xlsx_writer,
+                                     sheet_name="Job .zip Size Summary",
+                                     na_rep=np.NaN,
+                                     header=True,
+                                     index=False)
 
         print(f"Process Complete. See output file {create_output_file_path(extension='xlsx')}")
 

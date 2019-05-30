@@ -261,6 +261,7 @@ def main():
         master_zip_stats_df["ZIP Size KB"] = pd.to_numeric(master_zip_stats_df["ZIP Size KB"])
     except ValueError:
         print("No .zip files found.")
+        master_zip_stats_df = pd.DataFrame(data={"No Zip Files Found": [0]})
 
     # ___________________________
     #   LEVEL SUMMARY (INFO, ERROR)
