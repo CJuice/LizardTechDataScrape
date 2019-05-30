@@ -67,7 +67,7 @@ def main():
         :return: string to be used in naming output file
         """
         date_string = f"{datetime.datetime.today().year}-{datetime.datetime.today().month}-{datetime.datetime.today().day}"
-        return os.path.join(output_folder, f"LizardTechAnalysis_lidar_{date_string}.{extension}")
+        return os.path.join(output_folder, f"LizardTechAnalysis_imagery_{date_string}.{extension}")
 
     def determine_unique_email_extensions(unique_emails_df: pd.DataFrame) -> pd.DataFrame:
         """
