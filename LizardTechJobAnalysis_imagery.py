@@ -10,6 +10,9 @@ Author: CJuice
 Date Created: 20190311
 Revisions: Forked from lidar version and adjusted to fit imagery. Deleted portions of original because the Imagery Logs
 and the LIDAR Logs are not the same. Imagery lacks an Issuing URL so a lot of information is not available.
+20190530, CJuice: The zip file assessment was never written out, forgot to add the functionality so revised script
+to write zip file assessment results to output file. Also, when no zip files found, there was no dataframe to write.
+When no zips, now a basically blank dataframe is created to avoid raising exception.
 
 """
 
@@ -26,10 +29,10 @@ def main():
     import re
 
     # VARIABLES
-    jobs_folder = r'export_dir_imagery'   # TESTING
-    output_folder = r'GrabLizardTechOutputLogInfo_imagery'    # TESTING
-    # jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
-    # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
+    # jobs_folder = r'export_dir_imagery'   # TESTING
+    # output_folder = r'GrabLizardTechOutputLogInfo_imagery'    # TESTING
+    jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
+    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
 
     # FUNCTIONS
     def convert_start_date_time_to_datetime(start_dt_str):

@@ -7,7 +7,8 @@ to a single excel file with multiple sheets.
 datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 Author: CJuice
 Date Created: 20190306
-Revisions:
+Revisions: 20190530, CJuice: when no zip files found, there was no dataframe to write. When no zips, now a
+basically blank dataframe is created to avoid raising exception.
 
 NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
 well since focus was on using Pandas functionality, not overall architecture.
