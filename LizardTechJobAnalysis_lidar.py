@@ -7,8 +7,12 @@ to a single excel file with multiple sheets.
 datetime.strptime("Nov 29 06:22:44 EST 2018", "%b %d %H:%M:%S EST %Y")
 Author: CJuice
 Date Created: 20190306
-Revisions: 20190530, CJuice: when no zip files found, there was no dataframe to write. When no zips, now a
-basically blank dataframe is created to avoid raising exception.
+Revisions:
+20190530, CJuice: when no zip files found, there was no dataframe to write. When no zips, now a
+    basically blank dataframe is created to avoid raising exception.
+20190711, CJuice: added step to check column names and make sure all html df's had same columns. Add new if missing one
+    and set to default value. Then when concat all columns identical.
+
 
 NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
 well since focus was on using Pandas functionality, not overall architecture.
@@ -150,7 +154,7 @@ def main():
         :param issuing_url_ser: series of query string values parsed from issuing urls
         :return: series of query parameters and values
         """
-        query_string_dicts_series = (issuing_url_ser.apply(func=lambda x: urlpar.parse_qs(qs=urlpar.urlparse(x).query)))
+        query_string_dicts_series = issuing_url_ser.apply(func=lambda x: urlpar.parse_qs(qs=urlpar.urlparse(x).query))
         return query_string_dicts_series
 
     def isolate_value_in_list_or_replace_null(attr_val):
@@ -212,7 +216,7 @@ def main():
         for file in files:
             full_file_path = os.path.join(root, file)
             file_name, file_ext = os.path.splitext(file)
-            job_id = os.path.basename(os.path.dirname(full_file_path))
+            job_id = os.path.basename(os.path.dirname(full_file_path))  # In Prod, the folder name is the job id
             time_file_last_modified = os.path.getmtime(full_file_path)
             date_range_list.append(datetime.datetime.fromtimestamp(time_file_last_modified))
 
@@ -262,11 +266,12 @@ def main():
     #   JOB VALUES AS DATAFRAME
     #   Need to make single master html content and zip content dataframes from list of individual file dataframes
     try:
-        master_html_values_df = pd.DataFrame(pd.concat(objs=master_html_df_list))  #, sort=False
+        master_html_values_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
+        print(master_html_values_df.info())
+        print(master_html_values_df["JOB_ID"].head(40))
         master_html_values_df.set_index(keys="JOB_ID", drop=True, inplace=True)
     except ValueError:
         print("No .html files found.")
-    print(master_html_values_df.info())
 
     try:
         #   Original zip df set to dtype of str so numeric job names would not change if had leading zeros etc. But,
@@ -303,9 +308,8 @@ def main():
     #   ISSUING URL PROCESSING
     #   Issuing url query string value extraction
     issuing_url_series = extract_issuing_url_series(html_table_df=master_html_values_df)  # This series contains a job id index
-    issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_series)
-    print(issuing_url_query_string_dicts_series)
-    exit()
+    issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_ser=issuing_url_series)
+
     # ___________________________
     # QUERY PARAMETER EXAMINATION - MULTIPLE OUTPUTS GENERATED
     # Iterate over the query parameters in the issuing url's in the html logs, simmer down to unique occurrences
@@ -323,25 +327,27 @@ def main():
                                    }
     query_parameter_values_df_dict = {}
 
+    # TODO: Stopped here. Assessing making product containing extents AND spatial reference sys to do heatmap etc
     # Create a dataframe for each query parameter and store in dictionary with explanation term as key
     for key, value in query_parameter_explanation.items():
         try:
-            query_param_df = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(key, np.NaN))
-            query_parameter_values_df_dict[value] = query_param_df
+            query_param_ser = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(key, np.NaN))
+            print("\n", type(query_param_ser))
+            query_parameter_values_df_dict[value] = query_param_ser
         except KeyError:
             print(f"Key Error: {key} not found")
             pass
         else:
             pass
-
+    exit()
     # Create job id grouped, unique values dataframes for all query parameters.
     #   Must get unique occurrence for each job, otherwise counts influenced by quantity of issuing url requests
     # all_jobs_df = master_html_values_df.index.unique().to_frame(index=False)  # TURNED OFF
 
     unique_results_by_job_dict = {}
     query_param_unique_dfs_dict = {}
-    for key, value in query_parameter_values_df_dict.items():
-        query_param_values_df = value.to_frame(name=key)
+    for key, value_ser in query_parameter_values_df_dict.items():
+        query_param_values_df = value_ser.to_frame(name=key)
         query_param_values_df[key] = query_param_values_df[key].apply(isolate_value_in_list_or_replace_null)
         # query_param_values_df[key] = query_param_values_df[key].apply(lambda x: x[0]) # Replaced by custom function
         query_param_values_df.rename(columns={"Message": key}, inplace=True)
@@ -464,8 +470,8 @@ def main():
                                      na_rep=np.NaN,
                                      header=True,
                                      index=False)
-        for key, value in query_param_unique_dfs_dict.items():
-            value.to_excel(excel_writer=xlsx_writer,
+        for key, value_ser in query_param_unique_dfs_dict.items():
+            value_ser.to_excel(excel_writer=xlsx_writer,
                            sheet_name=f"QP - {key}",
                            na_rep=np.NaN,
                            header=True,
