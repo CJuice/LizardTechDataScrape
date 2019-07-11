@@ -28,10 +28,10 @@ def main():
     import urllib.parse as urlpar
 
     # VARIABLES
-    # jobs_folder = r'export_dir_lidar'   # TESTING
-    # output_folder = r'GrabLizardTechOutputLogInfo_lidar'    # TESTING
-    jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
-    output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
+    jobs_folder = r'export_dir_lidar'   # TESTING
+    output_folder = r'GrabLizardTechOutputLogInfo_lidar'    # TESTING
+    # jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
+    # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
 
     # FUNCTIONS
     def convert_start_date_time_to_datetime(start_dt_str):
@@ -231,6 +231,17 @@ def main():
                 # Need to add a unique job id field to be able to group message content and also relate dataframes
                 #   Set this job id as the index and store the dataframe for this html file in the master list
                 html_df["JOB_ID"] = job_id
+
+                # Some columns appear to be missing the "JOB_ID" column and have a column named "Unnamed: 5". This
+                #   causes an issue during the concatenation step. For those with Unnamed: 5, add a JOB_ID and set NaN
+                try:
+                    html_df.drop(columns=["Unnamed: 5"], inplace=True)
+                except KeyError as ke:
+                    # If Unnamed: 5 columns doesn't exist then no problem, keep moving.
+                    pass
+                else:
+                    html_df["JOB_ID"] = np.NaN
+
                 master_html_df_list.append(html_df)
 
             elif file_ext == ".zip":
@@ -239,7 +250,9 @@ def main():
                 #   file and store in the master list
                 byte_size = os.path.getsize(full_file_path) / 1000
                 data = {"Name": [job_id], "ZIP Size KB": [byte_size]}
-                master_zip_df_list.append(pd.DataFrame(data=data, dtype=str))
+                df = pd.DataFrame(data=data, dtype=str)
+
+                master_zip_df_list.append(df)
 
             else:
                 # Not interested in any other file types, if they happen to exist
@@ -249,10 +262,11 @@ def main():
     #   JOB VALUES AS DATAFRAME
     #   Need to make single master html content and zip content dataframes from list of individual file dataframes
     try:
-        master_html_values_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
+        master_html_values_df = pd.DataFrame(pd.concat(objs=master_html_df_list))  #, sort=False
         master_html_values_df.set_index(keys="JOB_ID", drop=True, inplace=True)
     except ValueError:
         print("No .html files found.")
+    print(master_html_values_df.info())
 
     try:
         #   Original zip df set to dtype of str so numeric job names would not change if had leading zeros etc. But,
@@ -290,7 +304,8 @@ def main():
     #   Issuing url query string value extraction
     issuing_url_series = extract_issuing_url_series(html_table_df=master_html_values_df)  # This series contains a job id index
     issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_series)
-
+    print(issuing_url_query_string_dicts_series)
+    exit()
     # ___________________________
     # QUERY PARAMETER EXAMINATION - MULTIPLE OUTPUTS GENERATED
     # Iterate over the query parameters in the issuing url's in the html logs, simmer down to unique occurrences
@@ -370,47 +385,47 @@ def main():
     # ___________________________
     # SPATIAL EXAMINATION OF EXPORT EXTENT
     # TODO: Stopped development on this section. Continue when time available. CJuice 20190306
-    # def process_raw_extent_value(val):
-    #     """
-    #
-    #     :param val:
-    #     :return:
-    #     """
-    #     val_inner_tuple = val[0]
-    #     inner_val_as_list = list(val_inner_tuple)
-    #     split_inner_val_list = inner_val_as_list[0].split(",")
-    #     if len(split_inner_val_list) == 5:
-    #         split_inner_val_list.pop(5)
-    #         split_inner_val_list.pop(2)
-    #         return split_inner_val_list
-    #     else:
-    #         try:
-    #             split_inner_val_list.remove("-Infinity")
-    #             split_inner_val_list.remove("Infinity")
-    #         except Exception as e:
-    #             return split_inner_val_list
-    #         else:
-    #             return split_inner_val_list
-    #
-    # def process_raw_epsg_values(val):
-    #     """
-    #
-    #     :param val:
-    #     :return:
-    #     """
-    #     return str(val[0][0].split(":")[1])
-    #
-    # exporting_extent_df = unique_results_by_job_dict["Exporting Extent"]["Exporting Extent"].apply(process_raw_extent_value).to_frame()
-    # epsg_df = unique_results_by_job_dict["Spatial Reference System"]["Spatial Reference System"].apply(process_raw_epsg_values).to_frame()
-    # spatial_ready_df = exporting_extent_df.join(other=epsg_df, on="JOB_ID", how="left")
-    # print(spatial_ready_df)
-    # # Create a polygon from each bounding extent in the epsg that is meaningful for the values
-    #
-    # # Re project the polygons to a common datum
-    #
-    # # Add these to a feature class with date.
-    #
-    # exit()
+    def process_raw_extent_value(val):
+        """
+
+        :param val:
+        :return:
+        """
+        val_inner_tuple = val[0]
+        inner_val_as_list = list(val_inner_tuple)
+        split_inner_val_list = inner_val_as_list[0].split(",")
+        if len(split_inner_val_list) == 5:
+            split_inner_val_list.pop(5)
+            split_inner_val_list.pop(2)
+            return split_inner_val_list
+        else:
+            try:
+                split_inner_val_list.remove("-Infinity")
+                split_inner_val_list.remove("Infinity")
+            except Exception as e:
+                return split_inner_val_list
+            else:
+                return split_inner_val_list
+
+    def process_raw_epsg_values(val):
+        """
+
+        :param val:
+        :return:
+        """
+        return str(val[0][0].split(":")[1])
+
+    exporting_extent_df = unique_results_by_job_dict["Exporting Extent"]["Exporting Extent"].apply(process_raw_extent_value).to_frame()
+    epsg_df = unique_results_by_job_dict["Spatial Reference System"]["Spatial Reference System"].apply(process_raw_epsg_values).to_frame()
+    spatial_ready_df = exporting_extent_df.join(other=epsg_df, on="JOB_ID", how="left")
+    print(spatial_ready_df)
+    # Create a polygon from each bounding extent in the epsg that is meaningful for the values
+
+    # Re project the polygons to a common datum
+
+    # Add these to a feature class with date.
+
+    exit()
 
     pass    # For above and below pycharm comments to be separate and foldable
 
