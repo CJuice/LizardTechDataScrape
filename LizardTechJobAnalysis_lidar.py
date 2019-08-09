@@ -12,6 +12,8 @@ Revisions:
     basically blank dataframe is created to avoid raising exception.
 20190711, CJuice: added step to check column names and make sure all html df's had same columns. Add new if missing one
     and set to default value. Then when concat all columns identical.
+20190809, CJuice: changed output file date string to have leading zeros for single digit months and days so that
+    file name sort properly
 
 
 NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
@@ -72,8 +74,6 @@ def main():
         :param extension: file extension to be appended on end of string
         :return: string to be used in naming output file
         """
-        # TODO: Revise the output date string to have leading 0's on single digit months and days
-        # date_string = f"{datetime.datetime.today().year}-{datetime.datetime.today().month}-{datetime.datetime.today().day}"
         date_string = datetime.datetime.now().strftime("%Y-%m-%d")
         return os.path.join(output_folder, f"LizardTechAnalysis_lidar_{date_string}.{extension}")
 
