@@ -72,7 +72,9 @@ def main():
         :param extension: file extension to be appended on end of string
         :return: string to be used in naming output file
         """
-        date_string = f"{datetime.datetime.today().year}-{datetime.datetime.today().month}-{datetime.datetime.today().day}"
+        # TODO: Revise the output date string to have leading 0's on single digit months and days
+        # date_string = f"{datetime.datetime.today().year}-{datetime.datetime.today().month}-{datetime.datetime.today().day}"
+        date_string = datetime.datetime.now().strftime("%Y-%m-%d")
         return os.path.join(output_folder, f"LizardTechAnalysis_lidar_{date_string}.{extension}")
 
     def determine_unique_email_extensions(unique_emails_df: pd.DataFrame) -> pd.DataFrame:
