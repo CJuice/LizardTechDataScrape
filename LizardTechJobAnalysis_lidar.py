@@ -13,7 +13,8 @@ Revisions:
 20190711, CJuice: added step to check column names and make sure all html df's had same columns. Add new if missing one
     and set to default value. Then when concat all columns identical.
 20190809, CJuice: changed output file date string to have leading zeros for single digit months and days so that
-    file name sort properly
+    file name sort properly. Added functionality generating new excel sheet containing job id, the spatial reference
+    system used, and the export extent of each job so that the extents can be mapped.
 
 
 NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
@@ -152,7 +153,9 @@ def main():
 
     def extract_query_string_dicts(issuing_url_ser: pd.Series) -> pd.Series:
         """
-        Parse the query string parameters and values from a Series of url values and return results as a dictionary
+        Parse the query string parameters and values from a Series of url values and return results as a series. The
+        index of the series is the Job ID and the values are a dict of query string parameter keys and list of values as
+        values in the dict.
         :param issuing_url_ser: series of query string values parsed from issuing urls
         :return: series of query parameters and values
         """
@@ -161,7 +164,7 @@ def main():
 
     def isolate_value_in_list_or_replace_null(attr_val):
         """
-        Detect numpy NaN values, type float when inspect, and replace with value.
+        Detect numpy NaN values (type float when inspect) and replace with custom value.
         This was added so that null/empty query parameters can be included in counts, which is important for indicating
         how many jobs did not define the parameter.
         :param attr_val: string value to be substituted for null value
@@ -269,8 +272,8 @@ def main():
     #   Need to make single master html content and zip content dataframes from list of individual file dataframes
     try:
         master_html_values_df = pd.DataFrame(pd.concat(objs=master_html_df_list))
-        print(master_html_values_df.info())
-        print(master_html_values_df["JOB_ID"].head(40))
+        # print(master_html_values_df.info())
+        # print(master_html_values_df["JOB_ID"].head(40))
         master_html_values_df.set_index(keys="JOB_ID", drop=True, inplace=True)
     except ValueError:
         print("No .html files found.")
@@ -329,38 +332,50 @@ def main():
                                    }
     query_parameter_values_df_dict = {}
 
-    # TODO: Stopped here. Assessing making product containing extents AND spatial reference sys to do heatmap etc
     # Create a dataframe for each query parameter and store in dictionary with explanation term as key
-    for key, value in query_parameter_explanation.items():
+    for query_param_key, parameter_name in query_parameter_explanation.items():
         try:
-            query_param_ser = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(key, np.NaN))
-            print("\n", type(query_param_ser))
-            query_parameter_values_df_dict[value] = query_param_ser
+            query_param_ser = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(query_param_key, np.NaN))
+            # print("\n", type(query_param_ser))
+            query_parameter_values_df_dict[parameter_name] = query_param_ser
         except KeyError:
-            print(f"Key Error: {key} not found")
+            print(f"Key Error: {query_param_key} not found")
             pass
         else:
             pass
-    exit()
+
     # Create job id grouped, unique values dataframes for all query parameters.
     #   Must get unique occurrence for each job, otherwise counts influenced by quantity of issuing url requests
     # all_jobs_df = master_html_values_df.index.unique().to_frame(index=False)  # TURNED OFF
 
     unique_results_by_job_dict = {}
     query_param_unique_dfs_dict = {}
-    for key, value_ser in query_parameter_values_df_dict.items():
-        query_param_values_df = value_ser.to_frame(name=key)
-        query_param_values_df[key] = query_param_values_df[key].apply(isolate_value_in_list_or_replace_null)
-        # query_param_values_df[key] = query_param_values_df[key].apply(lambda x: x[0]) # Replaced by custom function
-        query_param_values_df.rename(columns={"Message": key}, inplace=True)
-        query_param_values_df[key] = query_param_values_df[key].apply(lambda x: tuple([x]))  # pd.unique() won't work on lists, unhashable, cast to tuple
+    for query_param_key, value_ser in query_parameter_values_df_dict.items():
+
+        # need dataframe from each series
+        query_param_values_df = value_ser.to_frame(name=query_param_key)
+
+        # need to process values and substitute meaningful empty string or extract value in the value list
+        query_param_values_df[query_param_key] = query_param_values_df[query_param_key].apply(isolate_value_in_list_or_replace_null)
+
+        # rename columns to meaningful/accurate term
+        query_param_values_df.rename(columns={"Message": query_param_key}, inplace=True)
+
+        # need values list as tuple for .unique() to work...  pd.unique() won't work on lists, unhashable, cast to tuple
+        query_param_values_df[query_param_key] = query_param_values_df[query_param_key].apply(lambda x: tuple([x]))
+
+        # need data grouped by job id so performing for each job
         unique_gb = query_param_values_df.groupby("JOB_ID")
-        unique_results_df = unique_gb[key].unique().to_frame()
-        unique_results_by_job_dict[key] = unique_results_df
+        # need the unique values and convert to dataframe
+        unique_results_df = unique_gb[query_param_key].unique().to_frame()
+
+        # need to save dataframes for later use
+        unique_results_by_job_dict[query_param_key] = unique_results_df
 
         # all_jobs_df = all_jobs_df.join(other=unique_results_df, on="JOB_ID", how="left")  # TURNED OFF
 
-        list_of_unique_tuples = unique_results_df[key].tolist()
+        list_of_unique_tuples = unique_results_df[query_param_key].tolist()
+
         unique_tuples_list = []
         for item in list_of_unique_tuples:
             # NOTE: Items are np.ndarray. Encountered issues in value_counts() with ndarray's. Needed them as lists.
@@ -369,8 +384,12 @@ def main():
             # NOTE: Encountered issue here. Converting ndarray to a list wiped the few unique catalog items that
             #   contained more than one catalog name. Had to adjust by putting each item into a single tuple
             #   containing a comma sep string
-            converted = np.ndarray.tolist(item)
-            if key == "Catalog" and len(item) > 1:
+
+            # generic conversion
+            # converted = np.ndarray.tolist(item)
+
+            # special situation conversion
+            if query_param_key == "Catalog" and len(item) > 1:
                 blank_string = ""
                 for val in item:
                     val = val[0]
@@ -379,61 +398,85 @@ def main():
                     else:
                         blank_string += f", {val}"
                 converted = [(blank_string,)]   # Using extend on tuple adds the string value to the list, not a tuple
+            else:
+                # generic conversion
+                converted = np.ndarray.tolist(item)
+
+            # master list of values, regardless of generic or special
             unique_tuples_list.extend(converted)
 
+        # need the unique tuples list as a series to use value_counts function
         uniques_value_counts_series = pd.Series(data=unique_tuples_list).value_counts()
+
+        # need to convert to a dataframe, rename so meaningful
         uniques_df = uniques_value_counts_series.to_frame().rename(columns={0: "Job Count"}, inplace=False)
-        uniques_df.index.rename(name=key, inplace=True)
-        query_param_unique_dfs_dict[key] = uniques_df
+        uniques_df.index.rename(name=query_param_key, inplace=True)
+
+        query_param_unique_dfs_dict[query_param_key] = uniques_df
 
         # Final conversion of values to strings so that print out to excel doesn't show tuple container symbols
-        query_param_unique_dfs_dict[key].reset_index(inplace=True)
-        query_param_unique_dfs_dict[key][key] = query_param_unique_dfs_dict[key][key].apply(lambda x: x[0])
+        query_param_unique_dfs_dict[query_param_key].reset_index(inplace=True)
+
+        # Need the dataframe value from the dict for the key of interest, then get the column of interest, then extract
+        #   from the tuple the value so isn't in tuple format in output
+        # Note: first query_param_key call gets dictionary key and associated dataframe value. Second query_parm_key
+        #   call gets the column of interest from the dataframe. So, it is accessing a series.
+        query_param_unique_dfs_dict[query_param_key][query_param_key] = query_param_unique_dfs_dict[query_param_key][query_param_key].apply(lambda x: x[0])
+
+    # Need dataframe containing spatial reference system AND exporting extent coordinates for mapping lidar download
+    srs_ser = query_parameter_values_df_dict["Spatial Reference System"]
+    srs_ser.name = "Spatial Ref Sys"
+    export_extent_ser = query_parameter_values_df_dict["Exporting Extent"]
+    export_extent_ser.name = "Export Extent"
+    mappable_extent_df = pd.concat([srs_ser, export_extent_ser], axis=1)
+    mappable_extent_df["Spatial Ref Sys"] = mappable_extent_df["Spatial Ref Sys"].apply(lambda x: x[0]) # extract string
+
 
     # ___________________________
-    # SPATIAL EXAMINATION OF EXPORT EXTENT
-    # TODO: Stopped development on this section. Continue when time available. CJuice 20190306
-    def process_raw_extent_value(val):
-        """
-
-        :param val:
-        :return:
-        """
-        val_inner_tuple = val[0]
-        inner_val_as_list = list(val_inner_tuple)
-        split_inner_val_list = inner_val_as_list[0].split(",")
-        if len(split_inner_val_list) == 5:
-            split_inner_val_list.pop(5)
-            split_inner_val_list.pop(2)
-            return split_inner_val_list
-        else:
-            try:
-                split_inner_val_list.remove("-Infinity")
-                split_inner_val_list.remove("Infinity")
-            except Exception as e:
-                return split_inner_val_list
-            else:
-                return split_inner_val_list
-
-    def process_raw_epsg_values(val):
-        """
-
-        :param val:
-        :return:
-        """
-        return str(val[0][0].split(":")[1])
-
-    exporting_extent_df = unique_results_by_job_dict["Exporting Extent"]["Exporting Extent"].apply(process_raw_extent_value).to_frame()
-    epsg_df = unique_results_by_job_dict["Spatial Reference System"]["Spatial Reference System"].apply(process_raw_epsg_values).to_frame()
-    spatial_ready_df = exporting_extent_df.join(other=epsg_df, on="JOB_ID", how="left")
-    print(spatial_ready_df)
-    # Create a polygon from each bounding extent in the epsg that is meaningful for the values
-
-    # Re project the polygons to a common datum
-
-    # Add these to a feature class with date.
-
-    exit()
+    # # SPATIAL EXAMINATION OF EXPORT EXTENT
+    # # TODO: Stopped development on this section. Continue when time available. CJuice 20190306
+    # def process_raw_extent_value(val):
+    #     """
+    #
+    #     :param val:
+    #     :return:
+    #     """
+    #     val_inner_tuple = val[0]
+    #     inner_val_as_list = list(val_inner_tuple)
+    #     split_inner_val_list = inner_val_as_list[0].split(",")
+    #     if len(split_inner_val_list) == 5:
+    #         split_inner_val_list.pop(5)
+    #         split_inner_val_list.pop(2)
+    #         return split_inner_val_list
+    #     else:
+    #         try:
+    #             split_inner_val_list.remove("-Infinity")
+    #             split_inner_val_list.remove("Infinity")
+    #         except Exception as e:
+    #             return split_inner_val_list
+    #         else:
+    #             return split_inner_val_list
+    #
+    # def process_raw_epsg_values(val):
+    #     """
+    #
+    #     :param val:
+    #     :return:
+    #     """
+    #     return str(val[0][0].split(":")[1])
+    #
+    # exporting_extent_df = unique_results_by_job_dict["Exporting Extent"]["Exporting Extent"].apply(process_raw_extent_value).to_frame()
+    # epsg_df = unique_results_by_job_dict["Spatial Reference System"]["Spatial Reference System"].apply(process_raw_epsg_values).to_frame()
+    # spatial_ready_df = exporting_extent_df.join(other=epsg_df, on="JOB_ID", how="left")
+    # print(spatial_ready_df)
+    # # Create a polygon from each bounding extent in the epsg that is meaningful for the values
+    #
+    # # Re project the polygons to a common datum
+    #
+    # # Add these to a feature class with date.
+    #
+    # exit()
+    # ___________________________
 
     pass    # For above and below pycharm comments to be separate and foldable
 
@@ -446,7 +489,8 @@ def main():
     # ___________________________
     #   OUTPUT THE EVALUATIONS
     #   Output various final contents to a unique sheet in excel file
-    with pd.ExcelWriter(create_output_file_path(extension="xlsx")) as xlsx_writer:
+    output_file_path = create_output_file_path(extension="xlsx")
+    with pd.ExcelWriter(output_file_path) as xlsx_writer:
         date_range_df.to_excel(excel_writer=xlsx_writer,
                                sheet_name="Date Range of Jobs in Analysis",
                                na_rep=np.NaN,
@@ -472,12 +516,17 @@ def main():
                                      na_rep=np.NaN,
                                      header=True,
                                      index=False)
-        for key, value_ser in query_param_unique_dfs_dict.items():
+        for query_param_key, value_ser in query_param_unique_dfs_dict.items():
             value_ser.to_excel(excel_writer=xlsx_writer,
-                           sheet_name=f"QP - {key}",
-                           na_rep=np.NaN,
-                           header=True,
-                           index=False)
+                               sheet_name=f"QP - {query_param_key}",
+                               na_rep=np.NaN,
+                               header=True,
+                               index=False)
+        mappable_extent_df.to_excel(excel_writer=xlsx_writer,
+                                    sheet_name="Mappable Extents",
+                                    na_rep=np.NaN,
+                                    header=True,
+                                    index=True)
 
         # TURNED OFF
         # all_jobs_df.to_excel(excel_writer=xlsx_writer,
@@ -486,7 +535,7 @@ def main():
         #                      header=True,
         #                      index=False)
 
-        print(f"Process Complete. See output file {create_output_file_path(extension='xlsx')}")
+    print(f"Process Complete. See output file {output_file_path}")
 
 
 if __name__ == "__main__":
