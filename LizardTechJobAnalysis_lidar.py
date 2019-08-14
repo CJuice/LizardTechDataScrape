@@ -280,7 +280,7 @@ def main():
         master_html_values_df.set_index(keys="JOB_ID", drop=True, inplace=True)
     except ValueError:
         print("No .html files found.")
-    
+
     try:
         #   Original zip df set to dtype of str so numeric job names would not change if had leading zeros etc. But,
         #       need to cast the size values to float before writing to excel
