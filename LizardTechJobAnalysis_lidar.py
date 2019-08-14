@@ -237,6 +237,9 @@ def main():
                 # Need master list of all dataframes, each containing the extracted html file values
                 html_df = setup_initial_dataframe(file_path=full_file_path)
 
+                # Need to store the date of the job for use in visualizations
+                html_df["Job_Date"] = start_dtobj_utc
+
                 # Need to add a unique job id field to be able to group message content and also relate dataframes
                 #   Set this job id as the index and store the dataframe for this html file in the master list
                 html_df["JOB_ID"] = job_id
