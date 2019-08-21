@@ -536,6 +536,11 @@ def main():
                                na_rep=np.NaN,
                                header=True,
                                index=False)
+        mappable_extent_df.to_excel(excel_writer=xlsx_writer,
+                                    sheet_name="Mappable Extents",
+                                    na_rep=np.NaN,
+                                    header=True,
+                                    index=True)
         email_counts_df.to_excel(excel_writer=xlsx_writer,
                                  sheet_name="Unique Emails Summary",
                                  na_rep=np.NaN,
@@ -562,11 +567,7 @@ def main():
                                na_rep=np.NaN,
                                header=True,
                                index=False)
-        mappable_extent_df.to_excel(excel_writer=xlsx_writer,
-                                    sheet_name="Mappable Extents",
-                                    na_rep=np.NaN,
-                                    header=True,
-                                    index=True)
+
 
         # TURNED OFF
         # all_jobs_df.to_excel(excel_writer=xlsx_writer,
