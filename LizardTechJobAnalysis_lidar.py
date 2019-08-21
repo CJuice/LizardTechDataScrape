@@ -35,7 +35,8 @@ def main():
     import urllib.parse as urlpar
 
     # VARIABLES
-    jobs_folder = r'export_dir_lidar'   # TESTING
+    # jobs_folder = r'export_dir_lidar'   # TESTING
+    jobs_folder = r'export_dir2_lidar'   # TESTING
     output_folder = r'GrabLizardTechOutputLogInfo_lidar'    # TESTING
     # jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
     # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
@@ -242,17 +243,25 @@ def main():
 
                 # Need to add a unique job id field to be able to group message content and also relate dataframes
                 #   Set this job id as the index and store the dataframe for this html file in the master list
-                html_df["JOB_ID"] = job_id
+                # html_df["JOB_ID"] = job_id
+                composite_job_id = f"{job_id.replace(' ','_')}_{start_dtobj_utc.timestamp()}"  # Trying new job id format to avoid issues with situation where two different jobs are named same exact name
+                # Was seeing unexpected emtpy names
+                if composite_job_id.strip() == "" or len(composite_job_id) == 0:
+                    composite_job_id = f"UnknownJobName_{start_dtobj_utc.timestamp()}"
+
+                html_df["JOB_ID"] = composite_job_id
 
                 # Some columns appear to be missing the "JOB_ID" column and have a column named "Unnamed: 5". This
                 #   causes an issue during the concatenation step. For those with Unnamed: 5, add a JOB_ID and set NaN
                 try:
                     html_df.drop(columns=["Unnamed: 5"], inplace=True)
                 except KeyError as ke:
-                    # If Unnamed: 5 columns doesn't exist then no problem, keep moving.
+                    # If 'Unnamed: 5' column doesn't exist then no problem, keep moving.
                     pass
-                else:
-                    html_df["JOB_ID"] = np.NaN
+                # else:
+                #     # html_df["JOB_ID"] = np.NaN
+                #     # html_df["JOB_ID"] = composite_job_id
+                #     pass
 
                 master_html_df_list.append(html_df)
 
@@ -261,7 +270,7 @@ def main():
                 # What is the compressed job size of the .zip file, if .zip is present. Create dataframe for this .zip
                 #   file and store in the master list
                 byte_size = os.path.getsize(full_file_path) / 1000
-                data = {"Name": [job_id], "ZIP Size KB": [byte_size]}
+                data = {"Name": [job_id], "ZIP Size KB": [byte_size]}  # This job_id won't fully match composite_job_id
                 df = pd.DataFrame(data=data, dtype=str)
 
                 master_zip_df_list.append(df)
@@ -291,6 +300,20 @@ def main():
         print("No .zip files found.")
         master_zip_stats_df = pd.DataFrame(data={"No Zip Files Found": [0]})
 
+
+
+    # DATE TESTING
+    # TODO: believe i'm trying to add the date to the extent outputs so that i can visualize jobs with time element.
+    # print(master_html_values_df.info())
+    # print(master_html_values_df.head())
+
+    # test_pvt = pd.pivot_table(data=master_html_values_df, values=master_html_values_df.index, index="Job_Date", aggfunc=pd.unique())
+    # print(test_pvt)
+
+    # exit()
+
+
+
     # ___________________________
     #   LEVEL SUMMARY (INFO, ERROR)
     level_summary_list = process_level_summary_by_job(html_table_df=master_html_values_df)
@@ -316,6 +339,18 @@ def main():
     #   ISSUING URL PROCESSING
     #   Issuing url query string value extraction
     issuing_url_series = extract_issuing_url_series(html_table_df=master_html_values_df)  # This series contains a job id index
+    issue_url_size_with_duplicates = issuing_url_series.size
+
+    # Need to remove duplicates before continuing
+    issuing_url_df = issuing_url_series.to_frame()
+    issuing_url_df.drop_duplicates(inplace=True)
+    issuing_url_series = issuing_url_df["Message"]
+    issue_url_size_without_duplicates  = issuing_url_series.size
+    print(f"{issue_url_size_with_duplicates - issue_url_size_without_duplicates} Issuing URLs Duplicates Removed ")
+
+    # exit()
+
+
     issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_ser=issuing_url_series)
 
     # ___________________________
@@ -339,12 +374,12 @@ def main():
     for query_param_key, parameter_name in query_parameter_explanation.items():
         try:
             query_param_ser = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(query_param_key, np.NaN))
-            # print("\n", type(query_param_ser))
             query_parameter_values_df_dict[parameter_name] = query_param_ser
         except KeyError:
             print(f"Key Error: {query_param_key} not found")
             pass
         else:
+
             pass
 
     # Create job id grouped, unique values dataframes for all query parameters.
@@ -433,7 +468,9 @@ def main():
     export_extent_ser.name = "Export Extent"
     mappable_extent_df = pd.concat([srs_ser, export_extent_ser], axis=1)
     mappable_extent_df["Spatial Ref Sys"] = mappable_extent_df["Spatial Ref Sys"].apply(lambda x: x[0]) # extract string
-
+    mappable_extent_df["Export Extent"] = mappable_extent_df["Export Extent"].apply(lambda x: tuple(x))
+    mappable_extent_df.drop_duplicates(inplace=True)
+    # exit()
 
     # ___________________________
     # # SPATIAL EXAMINATION OF EXPORT EXTENT
