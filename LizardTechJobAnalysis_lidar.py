@@ -300,7 +300,7 @@ def main():
         print("No .zip files found.")
         master_zip_stats_df = pd.DataFrame(data={"No Zip Files Found": [0]})
 
-
+    job_to_date_df = master_html_values_df[["Job_Date"]].drop_duplicates()
 
     # DATE TESTING
     # TODO: believe i'm trying to add the date to the extent outputs so that i can visualize jobs with time element.
@@ -470,7 +470,7 @@ def main():
     mappable_extent_df["Spatial Ref Sys"] = mappable_extent_df["Spatial Ref Sys"].apply(lambda x: x[0]) # extract string
     mappable_extent_df["Export Extent"] = mappable_extent_df["Export Extent"].apply(lambda x: tuple(x))
     mappable_extent_df.drop_duplicates(inplace=True)
-    # exit()
+    mappable_extent_df = mappable_extent_df.join(other=job_to_date_df, how="left")
 
     # ___________________________
     # # SPATIAL EXAMINATION OF EXPORT EXTENT
