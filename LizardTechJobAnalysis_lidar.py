@@ -327,7 +327,6 @@ def main():
     #   Issuing url query string value extraction
     issuing_url_series = extract_issuing_url_series(html_table_df=master_html_values_df)  # This series contains a job id index
     issue_url_size_with_duplicates = issuing_url_series.size
-    print(issuing_url_series)
 
     # Need to remove duplicate issuing urls before continuing.
     # NOTE: There is a getdem and a getcloud url that have identical query parameters so more duplicate extent removal
@@ -463,7 +462,6 @@ def main():
     mappable_extent_df["Spatial Ref Sys"] = mappable_extent_df["Spatial Ref Sys"].apply(lambda x: x[0]) # extract string
 
     # Need to remove duplicate extents for jobs but first have to convert extent lists to tuples so hashable
-    print(mappable_extent_df.info())
     mappable_extents_with_duplicates = mappable_extent_df.size
     mappable_extent_df["Export Extent"] = mappable_extent_df["Export Extent"].apply(lambda x: tuple(x))
     mappable_extent_df.drop_duplicates(inplace=True)
