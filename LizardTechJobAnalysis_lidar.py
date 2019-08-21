@@ -15,7 +15,10 @@ Revisions:
 20190809, CJuice: changed output file date string to have leading zeros for single digit months and days so that
     file name sort properly. Added functionality generating new excel sheet containing job id, the spatial reference
     system used, and the export extent of each job so that the extents can be mapped.
-
+20190821, CJuice: Added functionality to remove duplicate issuing url's for jobs. This was causing duplicate values
+    like export extents. Changed job_id to include job time value in milliseconds to help avoid issues with
+    multiple jobs that happen to have the same name. The timestamp will help differentiate these jobs. Changed order
+    of sheets in output file so mappable extent is more quickly accessed.
 
 NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
 well since focus was on using Pandas functionality, not overall architecture.
@@ -243,11 +246,11 @@ def main():
 
                 # Need to add a unique job id field to be able to group message content and also relate dataframes
                 #   Set this job id as the index and store the dataframe for this html file in the master list
-                # html_df["JOB_ID"] = job_id
                 composite_job_id = f"{job_id.replace(' ','_')}_{start_dtobj_utc.timestamp()}"  # Trying new job id format to avoid issues with situation where two different jobs are named same exact name
-                # Was seeing unexpected emtpy names
-                if composite_job_id.strip() == "" or len(composite_job_id) == 0:
-                    composite_job_id = f"UnknownJobName_{start_dtobj_utc.timestamp()}"
+
+                # Was seeing unexpected empty names issue somehow, so introduced handling
+                # if composite_job_id.strip() == "" or len(composite_job_id) == 0:
+                #     composite_job_id = f"UnknownJobName_{start_dtobj_utc.timestamp()}"
 
                 html_df["JOB_ID"] = composite_job_id
 
@@ -258,10 +261,6 @@ def main():
                 except KeyError as ke:
                     # If 'Unnamed: 5' column doesn't exist then no problem, keep moving.
                     pass
-                # else:
-                #     # html_df["JOB_ID"] = np.NaN
-                #     # html_df["JOB_ID"] = composite_job_id
-                #     pass
 
                 master_html_df_list.append(html_df)
 
@@ -302,18 +301,6 @@ def main():
 
     job_to_date_df = master_html_values_df[["Job_Date"]].drop_duplicates()
 
-    # DATE TESTING
-    # TODO: believe i'm trying to add the date to the extent outputs so that i can visualize jobs with time element.
-    # print(master_html_values_df.info())
-    # print(master_html_values_df.head())
-
-    # test_pvt = pd.pivot_table(data=master_html_values_df, values=master_html_values_df.index, index="Job_Date", aggfunc=pd.unique())
-    # print(test_pvt)
-
-    # exit()
-
-
-
     # ___________________________
     #   LEVEL SUMMARY (INFO, ERROR)
     level_summary_list = process_level_summary_by_job(html_table_df=master_html_values_df)
@@ -340,18 +327,17 @@ def main():
     #   Issuing url query string value extraction
     issuing_url_series = extract_issuing_url_series(html_table_df=master_html_values_df)  # This series contains a job id index
     issue_url_size_with_duplicates = issuing_url_series.size
+    print(issuing_url_series)
 
-    # Need to remove duplicates before continuing
+    # Need to remove duplicate issuing urls before continuing.
+    # NOTE: There is a getdem and a getcloud url that have identical query parameters so more duplicate extent removal
+    #   occurs later in this process.
     issuing_url_df = issuing_url_series.to_frame()
     issuing_url_df.drop_duplicates(inplace=True)
-    issuing_url_series = issuing_url_df["Message"]
-    issue_url_size_without_duplicates  = issuing_url_series.size
+    issuing_url_series_no_dup = issuing_url_df["Message"]
+    issue_url_size_without_duplicates = issuing_url_series_no_dup.size
     print(f"{issue_url_size_with_duplicates - issue_url_size_without_duplicates} Issuing URLs Duplicates Removed ")
-
-    # exit()
-
-
-    issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_ser=issuing_url_series)
+    issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_ser=issuing_url_series_no_dup)
 
     # ___________________________
     # QUERY PARAMETER EXAMINATION - MULTIPLE OUTPUTS GENERATED
@@ -404,6 +390,7 @@ def main():
 
         # need data grouped by job id so performing for each job
         unique_gb = query_param_values_df.groupby("JOB_ID")
+
         # need the unique values and convert to dataframe
         unique_results_df = unique_gb[query_param_key].unique().to_frame()
 
@@ -475,7 +462,16 @@ def main():
     mappable_extent_df = pd.concat([srs_ser, export_extent_ser], axis=1)
     mappable_extent_df["Spatial Ref Sys"] = mappable_extent_df["Spatial Ref Sys"].apply(lambda x: x[0]) # extract string
 
-    # Need te job date so can map extents with a time component
+    # Need to remove duplicate extents for jobs but first have to convert extent lists to tuples so hashable
+    print(mappable_extent_df.info())
+    mappable_extents_with_duplicates = mappable_extent_df.size
+    mappable_extent_df["Export Extent"] = mappable_extent_df["Export Extent"].apply(lambda x: tuple(x))
+    mappable_extent_df.drop_duplicates(inplace=True)
+    mappable_extents_without_duplicates = mappable_extent_df.size
+    print(f"{mappable_extents_with_duplicates - mappable_extents_without_duplicates} Duplicate Mappable Extents Removed")
+    # TODO: May revisit the tuple format if causes issues with use of the extents in mapping
+
+    # Need the job date so can map extents with a time component. join job date table to mappable extents
     mappable_extent_df = mappable_extent_df.join(other=job_to_date_df, how="left")
 
     # ___________________________
