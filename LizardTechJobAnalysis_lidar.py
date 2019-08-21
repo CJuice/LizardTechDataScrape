@@ -461,15 +461,21 @@ def main():
         #   call gets the column of interest from the dataframe. So, it is accessing a series.
         query_param_unique_dfs_dict[query_param_key][query_param_key] = query_param_unique_dfs_dict[query_param_key][query_param_key].apply(lambda x: x[0])
 
-    # Need dataframe containing spatial reference system AND exporting extent coordinates for mapping lidar download
+    # MAPPABLE EXPORT EXTENTS
+    # Need dataframe containing spatial reference sys, export extent coords, and date for mapping lidar download
+    # Need the spatial ref sys series
     srs_ser = query_parameter_values_df_dict["Spatial Reference System"]
     srs_ser.name = "Spatial Ref Sys"
+
+    # Need the exporting extent series
     export_extent_ser = query_parameter_values_df_dict["Exporting Extent"]
     export_extent_ser.name = "Export Extent"
+
+    # Need the srs and extents together to know how extent coords plot
     mappable_extent_df = pd.concat([srs_ser, export_extent_ser], axis=1)
     mappable_extent_df["Spatial Ref Sys"] = mappable_extent_df["Spatial Ref Sys"].apply(lambda x: x[0]) # extract string
-    mappable_extent_df["Export Extent"] = mappable_extent_df["Export Extent"].apply(lambda x: tuple(x))
-    mappable_extent_df.drop_duplicates(inplace=True)
+
+    # Need te job date so can map extents with a time component
     mappable_extent_df = mappable_extent_df.join(other=job_to_date_df, how="left")
 
     # ___________________________
