@@ -246,7 +246,7 @@ def main():
 
                 # Need to add a unique job id field to be able to group message content and also relate dataframes
                 #   Set this job id as the index and store the dataframe for this html file in the master list
-                composite_job_id = f"{job_id.replace(' ','_')}_{start_dtobj_utc.timestamp()}"  # Trying new job id format to avoid issues with situation where two different jobs are named same exact name
+                composite_job_id = f"{job_id.replace(' ','_')}_{int(start_dtobj_utc.timestamp())}"  # Trying new job id format to avoid issues with situation where two different jobs are named same exact name
 
                 # Was seeing unexpected empty names issue somehow, so introduced handling
                 # if composite_job_id.strip() == "" or len(composite_job_id) == 0:
