@@ -15,7 +15,13 @@ Revisions:
 20190809, CJuice: changed output file date string to have leading zeros for single digit months and days so that
     file name sort properly. Added functionality generating new excel sheet containing job id, the spatial reference
     system used, and the export extent of each job so that the extents can be mapped.
-
+20190821, CJuice: Added functionality to remove duplicate issuing url's for jobs. This was causing duplicate values
+    like export extents. Changed job_id to include job time value in milliseconds to help avoid issues with
+    multiple jobs that happen to have the same name. The timestamp will help differentiate these jobs. Changed order
+    of sheets in output file so mappable extent is more quickly accessed.
+20190916, CJuice: Encountered ValueError when log had no date. Seeing logs from failed jobs that have no date or table.
+    Added a try/except to conversion function and also to creation of data table. Both raised value errors and needed
+    handling. The log file has no data so the job is skipped.
 
 NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
 well since focus was on using Pandas functionality, not overall architecture.
@@ -35,7 +41,8 @@ def main():
     import urllib.parse as urlpar
 
     # VARIABLES
-    jobs_folder = r'export_dir_lidar'   # TESTING
+    # jobs_folder = r'export_dir_lidar'   # TESTING
+    jobs_folder = r'export_dir2_lidar'   # TESTING
     output_folder = r'GrabLizardTechOutputLogInfo_lidar'    # TESTING
     # jobs_folder = r'D:\Program Files\LizardTech\Express Server\ImageServer\var\export_dir'  # Production
     # output_folder = r'D:\Scripts\GrabLizardTechOutputLogInfo\AnalysisProcessOutputs'  # Production
@@ -48,11 +55,15 @@ def main():
         :return: datetime object
         """
         start_dt_str = start_dt_str.strip()
-        if "EDT" in start_dt_str:
-            replacement_result = start_dt_str.replace("EDT", "EST")
-            result = dateutil.parser.parse(replacement_result) - datetime.timedelta(hours=1)
-        else:
-            result = dateutil.parser.parse(start_dt_str)
+        try:
+            if "EDT" in start_dt_str:
+                replacement_result = start_dt_str.replace("EDT", "EST")
+                result = dateutil.parser.parse(replacement_result) - datetime.timedelta(hours=1)
+            else:
+                result = dateutil.parser.parse(start_dt_str)
+        except ValueError as ve:
+            print(f"ValueError during dateutil.parser.parse(start_dt_str). {ve}")
+            result = dateutil.parser.parse("1970/01/01")  # for NaN values when date not present
         return result
 
     def count_email_occurrences(emails_dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -235,24 +246,32 @@ def main():
                 start_dtobj_utc.replace(tzinfo=to_zone)  # Not sure how will be affected by time changes on my puter
 
                 # Need master list of all dataframes, each containing the extracted html file values
-                html_df = setup_initial_dataframe(file_path=full_file_path)
+                try:
+                    html_df = setup_initial_dataframe(file_path=full_file_path)
+                except ValueError as ve:
+                    print(f"ValueError: {ve} {full_file_path}")
+                    continue
 
                 # Need to store the date of the job for use in visualizations
                 html_df["Job_Date"] = start_dtobj_utc
 
                 # Need to add a unique job id field to be able to group message content and also relate dataframes
                 #   Set this job id as the index and store the dataframe for this html file in the master list
-                html_df["JOB_ID"] = job_id
+                composite_job_id = f"{job_id.replace(' ','_')}_{int(start_dtobj_utc.timestamp())}"  # Trying new job id format to avoid issues with situation where two different jobs are named same exact name
+
+                # Was seeing unexpected empty names issue somehow, so introduced handling
+                # if composite_job_id.strip() == "" or len(composite_job_id) == 0:
+                #     composite_job_id = f"UnknownJobName_{start_dtobj_utc.timestamp()}"
+
+                html_df["JOB_ID"] = composite_job_id
 
                 # Some columns appear to be missing the "JOB_ID" column and have a column named "Unnamed: 5". This
                 #   causes an issue during the concatenation step. For those with Unnamed: 5, add a JOB_ID and set NaN
                 try:
                     html_df.drop(columns=["Unnamed: 5"], inplace=True)
                 except KeyError as ke:
-                    # If Unnamed: 5 columns doesn't exist then no problem, keep moving.
+                    # If 'Unnamed: 5' column doesn't exist then no problem, keep moving.
                     pass
-                else:
-                    html_df["JOB_ID"] = np.NaN
 
                 master_html_df_list.append(html_df)
 
@@ -261,7 +280,7 @@ def main():
                 # What is the compressed job size of the .zip file, if .zip is present. Create dataframe for this .zip
                 #   file and store in the master list
                 byte_size = os.path.getsize(full_file_path) / 1000
-                data = {"Name": [job_id], "ZIP Size KB": [byte_size]}
+                data = {"Name": [job_id], "ZIP Size KB": [byte_size]}  # This job_id won't fully match composite_job_id
                 df = pd.DataFrame(data=data, dtype=str)
 
                 master_zip_df_list.append(df)
@@ -291,6 +310,8 @@ def main():
         print("No .zip files found.")
         master_zip_stats_df = pd.DataFrame(data={"No Zip Files Found": [0]})
 
+    job_to_date_df = master_html_values_df[["Job_Date"]].drop_duplicates()
+
     # ___________________________
     #   LEVEL SUMMARY (INFO, ERROR)
     level_summary_list = process_level_summary_by_job(html_table_df=master_html_values_df)
@@ -316,7 +337,17 @@ def main():
     #   ISSUING URL PROCESSING
     #   Issuing url query string value extraction
     issuing_url_series = extract_issuing_url_series(html_table_df=master_html_values_df)  # This series contains a job id index
-    issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_ser=issuing_url_series)
+    issue_url_size_with_duplicates = issuing_url_series.size
+
+    # Need to remove duplicate issuing urls before continuing.
+    # NOTE: There is a getdem and a getcloud url that have identical query parameters so more duplicate extent removal
+    #   occurs later in this process.
+    issuing_url_df = issuing_url_series.to_frame()
+    issuing_url_df.drop_duplicates(inplace=True)
+    issuing_url_series_no_dup = issuing_url_df["Message"]
+    issue_url_size_without_duplicates = issuing_url_series_no_dup.size
+    print(f"{issue_url_size_with_duplicates - issue_url_size_without_duplicates} Issuing URLs Duplicates Removed ")
+    issuing_url_query_string_dicts_series = extract_query_string_dicts(issuing_url_ser=issuing_url_series_no_dup)
 
     # ___________________________
     # QUERY PARAMETER EXAMINATION - MULTIPLE OUTPUTS GENERATED
@@ -339,12 +370,12 @@ def main():
     for query_param_key, parameter_name in query_parameter_explanation.items():
         try:
             query_param_ser = issuing_url_query_string_dicts_series.apply(func=lambda x: x.get(query_param_key, np.NaN))
-            # print("\n", type(query_param_ser))
             query_parameter_values_df_dict[parameter_name] = query_param_ser
         except KeyError:
             print(f"Key Error: {query_param_key} not found")
             pass
         else:
+
             pass
 
     # Create job id grouped, unique values dataframes for all query parameters.
@@ -369,6 +400,7 @@ def main():
 
         # need data grouped by job id so performing for each job
         unique_gb = query_param_values_df.groupby("JOB_ID")
+
         # need the unique values and convert to dataframe
         unique_results_df = unique_gb[query_param_key].unique().to_frame()
 
@@ -426,62 +458,35 @@ def main():
         #   call gets the column of interest from the dataframe. So, it is accessing a series.
         query_param_unique_dfs_dict[query_param_key][query_param_key] = query_param_unique_dfs_dict[query_param_key][query_param_key].apply(lambda x: x[0])
 
-    # Need dataframe containing spatial reference system AND exporting extent coordinates for mapping lidar download
+    # MAPPABLE EXPORT EXTENTS
+    # Need dataframe containing spatial reference sys, export extent coords, and date for mapping lidar download
+    # Need the spatial ref sys series
     srs_ser = query_parameter_values_df_dict["Spatial Reference System"]
     srs_ser.name = "Spatial Ref Sys"
+
+    # Need the exporting extent series
     export_extent_ser = query_parameter_values_df_dict["Exporting Extent"]
     export_extent_ser.name = "Export Extent"
+
+    # Need the srs and extents together to know how extent coords plot
     mappable_extent_df = pd.concat([srs_ser, export_extent_ser], axis=1)
     mappable_extent_df["Spatial Ref Sys"] = mappable_extent_df["Spatial Ref Sys"].apply(lambda x: x[0]) # extract string
 
+    # Need to remove duplicate extents for jobs but first have to convert extent lists to tuples so hashable
+    mappable_extents_with_duplicates = mappable_extent_df.size
+    mappable_extent_df["Export Extent"] = mappable_extent_df["Export Extent"].apply(lambda x: tuple(x))
+    mappable_extent_df.drop_duplicates(inplace=True)
+    mappable_extents_without_duplicates = mappable_extent_df.size
+    print(f"{mappable_extents_with_duplicates - mappable_extents_without_duplicates} Duplicate Mappable Extents Removed")
+    # TODO: May revisit the tuple format if causes issues with use of the extents in mapping
+
+    # Need the job date so can map extents with a time component. join job date table to mappable extents
+    mappable_extent_df = mappable_extent_df.join(other=job_to_date_df, how="left")
 
     # ___________________________
-    # # SPATIAL EXAMINATION OF EXPORT EXTENT
-    # # TODO: Stopped development on this section. Continue when time available. CJuice 20190306
-    # def process_raw_extent_value(val):
-    #     """
-    #
-    #     :param val:
-    #     :return:
-    #     """
-    #     val_inner_tuple = val[0]
-    #     inner_val_as_list = list(val_inner_tuple)
-    #     split_inner_val_list = inner_val_as_list[0].split(",")
-    #     if len(split_inner_val_list) == 5:
-    #         split_inner_val_list.pop(5)
-    #         split_inner_val_list.pop(2)
-    #         return split_inner_val_list
-    #     else:
-    #         try:
-    #             split_inner_val_list.remove("-Infinity")
-    #             split_inner_val_list.remove("Infinity")
-    #         except Exception as e:
-    #             return split_inner_val_list
-    #         else:
-    #             return split_inner_val_list
-    #
-    # def process_raw_epsg_values(val):
-    #     """
-    #
-    #     :param val:
-    #     :return:
-    #     """
-    #     return str(val[0][0].split(":")[1])
-    #
-    # exporting_extent_df = unique_results_by_job_dict["Exporting Extent"]["Exporting Extent"].apply(process_raw_extent_value).to_frame()
-    # epsg_df = unique_results_by_job_dict["Spatial Reference System"]["Spatial Reference System"].apply(process_raw_epsg_values).to_frame()
-    # spatial_ready_df = exporting_extent_df.join(other=epsg_df, on="JOB_ID", how="left")
-    # print(spatial_ready_df)
-    # # Create a polygon from each bounding extent in the epsg that is meaningful for the values
-    #
-    # # Re project the polygons to a common datum
-    #
-    # # Add these to a feature class with date.
-    #
-    # exit()
+    # SPATIAL EXAMINATION OF EXPORT EXTENT
+    # TODO: Develop functionality once manually work out best process, destination for viz, etc.
     # ___________________________
-
-    pass    # For above and below pycharm comments to be separate and foldable
 
     # ___________________________
     # DATE RANGE EVALUATION
@@ -499,6 +504,11 @@ def main():
                                na_rep=np.NaN,
                                header=True,
                                index=False)
+        mappable_extent_df.to_excel(excel_writer=xlsx_writer,
+                                    sheet_name="Mappable Extents",
+                                    na_rep=np.NaN,
+                                    header=True,
+                                    index=True)
         email_counts_df.to_excel(excel_writer=xlsx_writer,
                                  sheet_name="Unique Emails Summary",
                                  na_rep=np.NaN,
@@ -525,11 +535,7 @@ def main():
                                na_rep=np.NaN,
                                header=True,
                                index=False)
-        mappable_extent_df.to_excel(excel_writer=xlsx_writer,
-                                    sheet_name="Mappable Extents",
-                                    na_rep=np.NaN,
-                                    header=True,
-                                    index=True)
+
 
         # TURNED OFF
         # all_jobs_df.to_excel(excel_writer=xlsx_writer,
