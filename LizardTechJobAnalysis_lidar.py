@@ -19,6 +19,9 @@ Revisions:
     like export extents. Changed job_id to include job time value in milliseconds to help avoid issues with
     multiple jobs that happen to have the same name. The timestamp will help differentiate these jobs. Changed order
     of sheets in output file so mappable extent is more quickly accessed.
+20190916, CJuice: Encountered ValueError when log had no date. Seeing logs from failed jobs that have no date or table.
+    Added a try/except to conversion function and also to creation of data table. Both raised value errors and needed
+    handling. The log file has no data so the job is skipped.
 
 NOTE TO FUTURE DEVELOPERS: First use of Pandas in a data processing script. Code may not designed
 well since focus was on using Pandas functionality, not overall architecture.
@@ -52,11 +55,15 @@ def main():
         :return: datetime object
         """
         start_dt_str = start_dt_str.strip()
-        if "EDT" in start_dt_str:
-            replacement_result = start_dt_str.replace("EDT", "EST")
-            result = dateutil.parser.parse(replacement_result) - datetime.timedelta(hours=1)
-        else:
-            result = dateutil.parser.parse(start_dt_str)
+        try:
+            if "EDT" in start_dt_str:
+                replacement_result = start_dt_str.replace("EDT", "EST")
+                result = dateutil.parser.parse(replacement_result) - datetime.timedelta(hours=1)
+            else:
+                result = dateutil.parser.parse(start_dt_str)
+        except ValueError as ve:
+            print(f"ValueError during dateutil.parser.parse(start_dt_str). {ve}")
+            result = dateutil.parser.parse("1970/01/01")  # for NaN values when date not present
         return result
 
     def count_email_occurrences(emails_dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -239,7 +246,11 @@ def main():
                 start_dtobj_utc.replace(tzinfo=to_zone)  # Not sure how will be affected by time changes on my puter
 
                 # Need master list of all dataframes, each containing the extracted html file values
-                html_df = setup_initial_dataframe(file_path=full_file_path)
+                try:
+                    html_df = setup_initial_dataframe(file_path=full_file_path)
+                except ValueError as ve:
+                    print(f"ValueError: {ve} {full_file_path}")
+                    continue
 
                 # Need to store the date of the job for use in visualizations
                 html_df["Job_Date"] = start_dtobj_utc
